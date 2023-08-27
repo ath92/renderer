@@ -159,6 +159,11 @@ estree-walker@^2.0.2:
   resolved "https://registry.yarnpkg.com/estree-walker/-/estree-walker-2.0.2.tgz#52f010178c2a4c117a7757cfe942adb7d2da4cac"
   integrity sha512-Rfkk/Mp/DL7JVje3u18FxFujQlTNR2q6QfMSMB7AvCBx91NGj/ba3kCfza0f6dVDbw7YlRf/nDrn7pQrCCyQ/w==
 
+fast-2d-poisson-disk-sampling@^1.0.3:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/fast-2d-poisson-disk-sampling/-/fast-2d-poisson-disk-sampling-1.0.3.tgz#fe84ee855ea71592f2f41815a1f6ef048f2e7f40"
+  integrity sha512-5jRLVwy1YCERwATyabp1OC34To0q2cKyfNBeglgjI1M1t4hpyqISY2Rb4jNayJ4IyV0sMbqVq85h5t11r7F9AA==
+
 fsevents@~2.3.2:
   version "2.3.3"
   resolved "https://registry.yarnpkg.com/fsevents/-/fsevents-2.3.3.tgz#cac6407785d03675a2a5e1a5305c697b347d90d6"

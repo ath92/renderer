@@ -1,14 +1,20 @@
 import './style.css'
 import Regl, { Buffer, Framebuffer, Mat4, Renderbuffer, Texture, Vec2, Vec3, Vec4 } from "regl"
+//@ts-ignore
+import PoissonDisk from "fast-2d-poisson-disk-sampling"
 import passThroughVert from "./pass-through-vert.glsl"
-import frag from "./fragment-shaders/menger.glsl"
+import frag from "./fragment-shaders/klein.glsl"
 import playerControls from './player-controls'
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')!.appendChild(canvas);
+
+const repeat = 2
 // resize to prevent rounding errors
 let width = window.innerWidth;
-let height = window.innerHeight
+let height = Math.min(window.innerHeight, Math.floor(width * (window.innerHeight / window.innerWidth)));
+while (width % repeat) width--;
+while (height % repeat) height--;
 canvas.width = width;
 canvas.height = height;
 const context = canvas.getContext("webgl", {
@@ -18,6 +24,7 @@ const context = canvas.getContext("webgl", {
 if (!context) throw new Error("no context")
 
 const regl = Regl(context); // no params = full screen canvas
+
 
 type SDFUniforms = {
   screenSize: Vec2,
@@ -44,7 +51,7 @@ const position = regl.buffer([
   [-1, 1]
 ]);
 
-const shape = [width / 2, height / 2] as [number, number]
+const shape = [Math.floor(width / repeat), Math.floor(height / repeat)] as [number, number]
 
 const color = regl.texture({
   shape,
@@ -107,7 +114,9 @@ const drawToCanvas = regl<DrawToCanvasUniforms, {}, DrawToCanvasUniforms>({
 type UpsampleCanvasUniforms = {
   existingTexture: Texture | Framebuffer
   inputTexture: Texture | Framebuffer
-  weights: Vec4
+  offset: Vec2,
+  strength: number,
+  repeat: number,
 }
 
 type FramebufferProp = {
@@ -120,20 +129,20 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
       precision highp float;
       uniform sampler2D inputTexture;
       uniform sampler2D existingTexture;
-      uniform vec4 weights;
       varying vec2 uv;
+      uniform vec2 offset;
+      uniform float strength;
+      uniform float repeat;
 
       void main () {
         vec2 xy = uv * 0.5 + 0.5;
-        vec2 m = mod(gl_FragCoord.xy - vec2(.5), 2.);
-        bool left = m.x < .5;
-        bool top = m.y < .5;
-        float weight = 
-          float(left && top) * weights.x + 
-          float(!left && top) * weights.y +
-          float(left && !top) * weights.z +
-          float(!left && !top) * weights.w;
+        vec2 m = mod(gl_FragCoord.xy , repeat);
+        vec2 modOffset = mod(offset, 2.);
 
+        float dist = min(length(m - offset), length(m - modOffset)) / repeat;
+        // float dist = length(m - offset) / repeat.;
+
+        float weight = pow((1. - dist), strength / 5.);
         vec4 current = texture2D(existingTexture, xy);
         vec4 color = texture2D(inputTexture, xy);
         gl_FragColor = mix(current, color, weight);
@@ -143,7 +152,9 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
   uniforms: {
       existingTexture: regl.prop<UpsampleCanvasUniforms, 'existingTexture'>('existingTexture'),
       inputTexture: regl.prop<UpsampleCanvasUniforms, 'inputTexture'>('inputTexture'),
-      weights: regl.prop<UpsampleCanvasUniforms, 'weights'>('weights'),
+      offset: regl.prop<UpsampleCanvasUniforms, 'offset'>('offset'),
+      strength: regl.prop<UpsampleCanvasUniforms, 'strength'>('strength'),
+      repeat: regl.prop<UpsampleCanvasUniforms, 'repeat'>('repeat'),
   },
   attributes: {
       position
@@ -152,39 +163,11 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
   framebuffer: regl.prop<FramebufferProp, "framebuffer">("framebuffer"),
 });
 
-const steps: {
-  offset: Vec2,
-  weights: Vec4,
-}[] = [
-  {
-    offset: [0, 0],
-    weights: [
-      1, 1, 
-      1, 1
-    ],
-  },
-  {
-    offset: [1, 1],
-    weights: [
-      0, 0, 
-      0, 1
-    ],
-  },
-  {
-    offset: [1, 0],
-    weights: [
-      0, 1, 
-      0, 0
-    ],
-  },
-  {
-    offset: [0, 1],
-    weights: [
-      0, 0, 
-      1, 0
-    ],
-  },
-]
+const offsets: [number, number][] = new PoissonDisk({
+  shape: [repeat, repeat],
+  radius: .25,
+}).fill();
+console.log(offsets)
 
 // if has changes, render new thing immediately to screen (?)
 // else if not yet highest resolution, upsample
@@ -192,16 +175,30 @@ const steps: {
 // and then render that to screen
 
 
+const screenTex1 = regl.texture({
+  width,
+  height,
+  mag: 'linear',
+})
+
 const screenBuffer1 = regl.framebuffer({
   width,
   height,
   depth: false,
+  color: screenTex1,
+})
+
+const screenTex2 = regl.texture({
+  width,
+  height,
+  mag: 'linear',
 })
 
 const screenBuffer2 = regl.framebuffer({
   width,
   height,
   depth: false,
+  color: screenTex2,
 })
 
 let frame = 0
@@ -216,8 +213,8 @@ function loop() {
   if (state.hasChanges) { 
     step = 0
   }
-  if (step < steps.length) {
-    const { offset, weights } = steps[step]
+  if (step < offsets.length) {
+    const offset = offsets[step]
     renderSDF({
       screenSize: shape,
       cameraPosition: state.cameraPosition as Vec3,
@@ -225,22 +222,24 @@ function loop() {
       scrollX: state.scrollX,
       scrollY: state.scrollY,
       offset,
-      repeat: [2, 2],
+      repeat: [repeat, repeat],
     })
     upsample({
       inputTexture: fbo,
       existingTexture: source,
-      weights,
+      offset,
       framebuffer: target,
+      strength: step,
+      repeat,
     })
     drawToCanvas({
       inputTexture: target
     })
-    console.log(offset, weights)
+    console.log("doing this!")
   }
   
   requestAnimationFrame(loop)
-  if (frame % 40 === 0) step++
+  step++
   frame++
 }
 

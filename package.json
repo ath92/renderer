@@ -14,6 +14,7 @@
     "vite-plugin-glsl": "^1.1.2"
   },
   "dependencies": {
+    "fast-2d-poisson-disk-sampling": "^1.0.3",
     "gl-matrix": "^3.4.3",
     "regl": "^2.1.0"
   }

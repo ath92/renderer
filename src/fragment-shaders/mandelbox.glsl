@@ -1,5 +1,7 @@
 precision highp float;
 uniform vec2 screenSize;
+uniform vec2 offset;
+uniform vec2 repeat;
 uniform float time;
 uniform vec3 cameraPosition;
 uniform mat4 cameraDirection;
@@ -15,7 +17,7 @@ const int LIGHT_ITERATIONS= 60;
 const vec3 spaceRepetition = vec3(12);
 
 vec3 getRay(vec2 xy) {
-    vec2 normalizedCoords = xy - vec2(0.5);
+    vec2 normalizedCoords = xy - vec2(0.5) + (offset / repeat);
     vec2 pixel = (normalizedCoords - 0.5 * screenSize) / min(screenSize.x, screenSize.y);
 
     // normalize to get unit vector
