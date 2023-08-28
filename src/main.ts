@@ -136,13 +136,13 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
 
       void main () {
         vec2 xy = uv * 0.5 + 0.5;
-        vec2 m = mod(gl_FragCoord.xy , repeat);
-        vec2 modOffset = mod(offset, 2.);
+        vec2 m = mod(gl_FragCoord.xy  , repeat);
+        vec2 modOffset = mod(offset, repeat);
 
         float dist = min(length(m - offset), length(m - modOffset)) / repeat;
         // float dist = length(m - offset) / repeat.;
 
-        float weight = pow((1. - dist), strength / 5.);
+        float weight = pow((1. - dist), pow(strength, .5));
         vec4 current = texture2D(existingTexture, xy);
         vec4 color = texture2D(inputTexture, xy);
         gl_FragColor = mix(current, color, weight);
@@ -165,7 +165,7 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
 
 const offsets: [number, number][] = new PoissonDisk({
   shape: [repeat, repeat],
-  radius: .25,
+  radius: .2,
 }).fill();
 console.log(offsets)
 
@@ -235,7 +235,6 @@ function loop() {
     drawToCanvas({
       inputTexture: target
     })
-    console.log("doing this!")
   }
   
   requestAnimationFrame(loop)
