@@ -9,9 +9,16 @@ import playerControls from './player-controls'
 const canvas = document.createElement('canvas');
 document.querySelector('#app')!.appendChild(canvas);
 
-const repeat = 2
+const repeat = parseInt(new URLSearchParams(location.search).get("performance") as string | null ?? "2")
+document.addEventListener("keyup", (e: KeyboardEvent) => {
+  if (Array(10).fill(0).map((_, i) => i.toString()).includes(e.key)) {
+    const newSearch = new URLSearchParams(location.search)
+    newSearch.set("performance", e.key)
+    location.href = `${location.origin}${location.pathname}?${newSearch}`
+  }
+})
 // resize to prevent rounding errors
-let width = window.innerWidth;
+let width = Math.floor(window.innerWidth);
 let height = Math.min(window.innerHeight, Math.floor(width * (window.innerHeight / window.innerWidth)));
 while (width % repeat) width--;
 while (height % repeat) height--;
@@ -51,7 +58,7 @@ const position = regl.buffer([
   [-1, 1]
 ]);
 
-const shape = [Math.floor(width / repeat), Math.floor(height / repeat)] as [number, number]
+const shape = [width / repeat, height / repeat] as [number, number]
 
 const color = regl.texture({
   shape,
@@ -115,8 +122,10 @@ type UpsampleCanvasUniforms = {
   existingTexture: Texture | Framebuffer
   inputTexture: Texture | Framebuffer
   offset: Vec2,
-  strength: number,
+  step: number,
   repeat: number,
+  screenSize: Vec2,
+  totalSteps: number,
 }
 
 type FramebufferProp = {
@@ -131,30 +140,39 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
       uniform sampler2D existingTexture;
       varying vec2 uv;
       uniform vec2 offset;
-      uniform float strength;
+      uniform float step;
       uniform float repeat;
+      uniform vec2 screenSize;
+
+      uniform float totalSteps;
 
       void main () {
-        vec2 xy = uv * 0.5 + 0.5;
-        vec2 m = mod(gl_FragCoord.xy  , repeat);
-        vec2 modOffset = mod(offset, repeat);
+        vec2 xy = gl_FragCoord.xy / screenSize;
+        vec2 m = mod(gl_FragCoord.xy, repeat);
 
-        float dist = min(length(m - offset), length(m - modOffset)) / repeat;
-        // float dist = length(m - offset) / repeat.;
 
-        float weight = pow((1. - dist), pow(strength, .5));
         vec4 current = texture2D(existingTexture, xy);
-        vec4 color = texture2D(inputTexture, xy);
-        gl_FragColor = mix(current, color, weight);
-        // gl_FragColor = vec4(weight, 0 ,0., 1.);
+        vec2 samplexy = xy + ((m - offset) / 2.) / screenSize;
+        vec4 sample = texture2D(inputTexture, samplexy);
+
+        float maxDist = sqrt(2. * repeat * repeat);
+        float d = distance(m, offset) / maxDist;
+        float dist = min(d, 1. - d); // -> max .5
+        // dist = d;
+
+        float weight = clamp(pow((.85 - dist), pow(step, .5)), 0., 1.); // why .85?
+        gl_FragColor = mix(current, sample, weight);
+        // gl_FragColor = vec4(m - offset ,0., 1.);
       }
   `,
   uniforms: {
       existingTexture: regl.prop<UpsampleCanvasUniforms, 'existingTexture'>('existingTexture'),
       inputTexture: regl.prop<UpsampleCanvasUniforms, 'inputTexture'>('inputTexture'),
       offset: regl.prop<UpsampleCanvasUniforms, 'offset'>('offset'),
-      strength: regl.prop<UpsampleCanvasUniforms, 'strength'>('strength'),
+      step: regl.prop<UpsampleCanvasUniforms, 'step'>('step'),
       repeat: regl.prop<UpsampleCanvasUniforms, 'repeat'>('repeat'),
+      screenSize: regl.prop<UpsampleCanvasUniforms, 'screenSize'>('screenSize'),
+      totalSteps: regl.prop<UpsampleCanvasUniforms, 'totalSteps'>('totalSteps'),
   },
   attributes: {
       position
@@ -163,22 +181,28 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
   framebuffer: regl.prop<FramebufferProp, "framebuffer">("framebuffer"),
 });
 
+function shuffleArray(array: any[]) {
+  for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
 const offsets: [number, number][] = new PoissonDisk({
   shape: [repeat, repeat],
   radius: .2,
 }).fill();
+
+shuffleArray(offsets)
+
+
 console.log(offsets)
-
-// if has changes, render new thing immediately to screen (?)
-// else if not yet highest resolution, upsample
-// first make it render to 1/4 resolution
-// and then render that to screen
-
 
 const screenTex1 = regl.texture({
   width,
   height,
-  mag: 'linear',
+  mag: 'nearest',
+  // mag: 'linear',
 })
 
 const screenBuffer1 = regl.framebuffer({
@@ -191,7 +215,8 @@ const screenBuffer1 = regl.framebuffer({
 const screenTex2 = regl.texture({
   width,
   height,
-  mag: 'linear',
+  mag: 'nearest',
+  // mag: 'linear',
 })
 
 const screenBuffer2 = regl.framebuffer({
@@ -214,6 +239,7 @@ function loop() {
     step = 0
   }
   if (step < offsets.length) {
+    // console.log(step)
     const offset = offsets[step]
     renderSDF({
       screenSize: shape,
@@ -229,8 +255,10 @@ function loop() {
       existingTexture: source,
       offset,
       framebuffer: target,
-      strength: step,
+      step,
       repeat,
+      screenSize: [width, height],
+      totalSteps: offsets.length,
     })
     drawToCanvas({
       inputTexture: target
