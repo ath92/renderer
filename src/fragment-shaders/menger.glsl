@@ -62,12 +62,16 @@ float doModel(vec3 p) {
     );
 }
 // this is kinda contrived and does a bunch of stuff I'm not using right now, but I'll leave it like this for now
-vec3 trace(vec3 origin, vec3 direction, out int iterations) {
+vec3 trace(vec3 origin, vec3 direction, out int iterations, out float distanceAtEnd) {
     vec3 position = origin;
     for(int i = 0; i < MAX_ITER; i++) {
         iterations = i;
         float d = doModel(position);
-        if (d < HIT_THRESHOLD) break;
+        float distanceToOrigin = distance(position, origin);
+        if (d < HIT_THRESHOLD * distanceToOrigin) {
+            distanceAtEnd = d;
+            break;
+        }
         position += d * direction;
     }
     return position;
@@ -90,9 +94,12 @@ void main() {
 
     float brightness = 0.;
     int iterations;
-    vec3 collision = trace(cameraPosition * 20., direction, iterations);
+    float distanceAtEnd = 0.;
+    vec3 collision = trace(cameraPosition * 20., direction, iterations, distanceAtEnd);
     if (iterations < MAX_ITER - 1) { // actual collision
         brightness = getIllumination(collision, iterations);
+    } else {
+        brightness = min(1., 1. - distanceAtEnd / 100.);
     }
     gl_FragColor = vec4(
         brightness,

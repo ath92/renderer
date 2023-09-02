@@ -1,9 +1,10 @@
-import { vec3, mat4, quat } from 'gl-matrix';
+import { vec3, mat4, quat, mat3 } from 'gl-matrix';
 
 const forward = vec3.fromValues(0, 0, 1);
 const backward = vec3.fromValues(0, 0, -1);
 const left = vec3.fromValues(-1, 0, 0);
 const right = vec3.fromValues(1, 0, 0);
+const up = vec3.fromValues(0, 1, 0);
 
 const minSpeed = 0.00005;
 
@@ -15,17 +16,32 @@ function getTouchEventCoordinates(touchEvent: TouchEvent) {
     }
 }
 
+const search = new URLSearchParams(window.location.search)
+const searchPos = search.get("position")
+const searchDir = search.get("direction")
+
+
+type Mat3 = [number, number, number, number, number, number, number, number, number]
+const position = vec3.fromValues(...(searchPos ? searchPos.split(",").map((s) => parseFloat(s)) : [0, 0, -9]) as [number, number, number])
+const direction = mat3.fromValues(...(searchDir ? searchDir.split(",").map((s) => parseFloat(s)) : mat3.identity(mat3.create())) as Mat3)
+
+const dirVec = vec3.fromValues(0, 0, 1)
+vec3.transformMat3(dirVec, dirVec, direction)
+
+const mouseY = vec3.angle(dirVec, up)
+const mouseX = vec3.angle(dirVec, right)
+
 class PlayerControls {
     acceleration: number
     friction: number
-    position: vec3 = vec3.fromValues(0, 0, -9)
-    direction: quat= quat.create()
-    speed: vec3 = vec3.fromValues(0, 0, 0.01)
+    position: vec3 = position
+    direction: quat = quat.fromMat3(quat.create(), direction)
+    speed: vec3 = vec3.fromValues(0, 0, 0)
     mouseSensitivity: number
     touchSensitivity: number
     isPanning: boolean = false
-    mouseX: number = 0
-    mouseY: number = 0
+    mouseX: number = mouseX
+    mouseY: number = mouseY
     touchX: number = 0
     touchY: number = 0
     touchStartX: number
@@ -145,6 +161,8 @@ class PlayerControls {
             this.mouseX,
             0
         );
+
+        
     
 
         // strafing with keys
