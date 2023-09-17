@@ -7,36 +7,32 @@ import playerControls from './player-controls'
 
 const urlParams = new URLSearchParams(window.location.search);
 const fractal = urlParams.get('fractal') || 'mandelbulb';
-let repeat = parseInt(urlParams.get("performance") as string | null ?? "4")
+let performance = parseInt(urlParams.get("performance") as string | null ?? "3")
+
+const maxPerformance = 4
+
+let repeat = 2 ** performance
 
 const canvas = document.createElement('canvas');
 document.querySelector('#app')!.appendChild(canvas);
 // resize to prevent rounding errors
-let width = Math.floor(window.innerWidth);
-let height = Math.min(window.innerHeight, Math.floor(width * (window.innerHeight / window.innerWidth)));
-function resize(newRepeat: number) {
-  console.log("resize", newRepeat)
-  repeat = newRepeat;
-  width = window.innerWidth - (window.innerWidth % newRepeat);
-  height = window.innerHeight - (window.innerHeight % newRepeat);
-  canvas.width = width//window.innerWidth;
-  canvas.height = height//window.innerHeight;
-}
+const width = window.innerWidth - (window.innerWidth % 8);
+const height = window.innerHeight - (window.innerHeight % 8);
+canvas.width = width
+canvas.height = height
   
 let frame = 0
 let step = 0
 
-resize(repeat)
-
 window.addEventListener("keyup", (e: KeyboardEvent) => {
-  if (Array(10).fill(0).map((_, i) => i.toString()).includes(e.key)) {
+  if (Array(maxPerformance).fill(0).map((_, i) => i.toString()).includes(e.key)) {
     const newSearch = new URLSearchParams(location.search)
     newSearch.set("performance", e.key)
     newSearch.set("position", playerControls.position.map((n) => n).join(","))
     newSearch.set("direction", playerControls.state.cameraDirection.map((n) => n).join(","))
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
-    repeat = parseInt(e.key)
-    resize(repeat)
+    performance = parseInt(e.key) - 1
+    repeat = 2 ** performance
     step = 0
     frame = 0
   }
@@ -51,12 +47,9 @@ if (!context) throw new Error("no context")
 
 const regl = Regl(context); // no params = full screen canvas
 
-const precisionFbos = Array(10).fill(0).map((_, i) => {
-  const repeat = i + 1
-  const width = window.innerWidth - (window.innerWidth % repeat);
-  const height = window.innerHeight - (window.innerHeight % repeat);
+const precisionFbos = Array(maxPerformance).fill(0).map((_, i) => {
+  const repeat = 2 ** i
   const shape = [width / repeat, height / repeat] as [number, number]
-  
   const color = regl.texture({
     shape,
     // mag: 'linear',
@@ -89,43 +82,42 @@ const precisionFbos = Array(10).fill(0).map((_, i) => {
   // offsets.unshift([repeat / 2, repeat / 2])
   offsets.unshift([0, 0])
 
-  const screenTex1 = regl.texture({
-    width,
-    height,
-    // mag: 'nearest',
-    mag: 'linear',
-  })
-  
-  const screenBuffer1 = regl.framebuffer({
-    width,
-    height,
-    depth: false,
-    color: screenTex1,
-  })
-  
-  const screenTex2 = regl.texture({
-    width,
-    height,
-    // mag: 'nearest',
-    mag: 'linear',
-  })
-  
-  const screenBuffer2 = regl.framebuffer({
-    width,
-    height,
-    depth: false,
-    color: screenTex2,
-  })
-  
-  const pingpong = (frame: number) => frame % 2 === 0 ? [screenBuffer1, screenBuffer2]: [screenBuffer2, screenBuffer1]
-
   return {
     fbo,
     shape,
     offsets,
-    pingpong,
   }
 });
+
+const screenTex1 = regl.texture({
+  width,
+  height,
+  mag: 'nearest',
+  // mag: 'linear',
+})
+
+const screenBuffer1 = regl.framebuffer({
+  width,
+  height,
+  depth: false,
+  color: screenTex1,
+})
+
+const screenTex2 = regl.texture({
+  width,
+  height,
+  mag: 'nearest',
+  // mag: 'linear',
+})
+
+const screenBuffer2 = regl.framebuffer({
+  width,
+  height,
+  depth: false,
+  color: screenTex2,
+})
+
+const pingpong = (frame: number) => frame % 2 === 0 ? [screenBuffer1, screenBuffer2]: [screenBuffer2, screenBuffer1]
 
 type SDFUniforms = {
   screenSize: Vec2,
@@ -240,7 +232,7 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
 
         float maxDist = sqrt(2. * repeat * repeat);
         float d = distance(m, offset) / maxDist;
-        float dist = min(d, 1. - d); // -> max .5
+        float dist = min(d, 1.00 - d); 
         //dist = d;
 
         float weight = clamp(pow((1. - dist), pow(step, sqrt(2.)/2.)), 0., 1.);
@@ -265,12 +257,10 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
 });
 
 let isRendering = true
-const minPrecision = 1
-const maxPrecision = 6
 let from: Framebuffer
 function loop() {
   const state = playerControls.state
-  const { fbo, shape, offsets, pingpong } = precisionFbos[repeat - 1]
+  const { fbo, shape, offsets } = precisionFbos[performance]
   const [source, target] = pingpong(frame)
   if (!from) from = source
   if (state.hasChanges) { 
@@ -328,11 +318,13 @@ function fpsMeter() {
 
       if (isRendering) {
         if (fps >= 60) {
-          const nextRepeat = Math.max(minPrecision, repeat - 1)
-          resize(nextRepeat)
-        } else if (fps < 60) {
-          const nextRepeat = Math.min(maxPrecision, repeat + 1)
-          resize(nextRepeat)
+          const nextPerformance = Math.max(0, performance - 1)
+          performance = nextPerformance
+          repeat = 2 ** nextPerformance
+        } else if (fps < 50) {
+          const nextPerformance = Math.min(maxPerformance - 1, performance + 1)
+          performance = nextPerformance
+          repeat = 2 ** nextPerformance
         }
       }
 

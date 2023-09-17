@@ -146,6 +146,8 @@ class PlayerControls {
             }
         }
     };
+
+    time = performance.now()
     
     loop() {
         if (this.isTouching) {
@@ -163,7 +165,9 @@ class PlayerControls {
         );
 
         
-    
+        const now = performance.now()
+        const timeDiff = now - this.time
+        const frameTimeFactor = timeDiff / (1000 / 60)
 
         // strafing with keys
         const diff = vec3.create();
@@ -174,7 +178,7 @@ class PlayerControls {
 
         // vec3.normalize(diff, diff);
         vec3.transformQuat(diff, diff, this.direction);
-        vec3.scale(diff, diff, (this.sprintMode ? 4 : 1) * this.acceleration);
+        vec3.scale(diff, diff, (this.sprintMode ? 4 : 1) * this.acceleration * frameTimeFactor);
         // const currentDistance = getCurrentDistance(this.position)
         vec3.scale(this.speed, this.speed, 1 - this.friction);
         if (vec3.length(this.speed) < minSpeed) {
@@ -183,6 +187,8 @@ class PlayerControls {
         this.hasChanges = this.hasChanges || vec3.len(this.speed) > 0
         vec3.add(this.speed, this.speed, diff);
         vec3.add(this.position, this.position, this.speed);
+
+        this.time = now
     
         requestAnimationFrame(() => this.loop());
     }
