@@ -84,7 +84,7 @@ vec3 calcNormal(vec3 p, float h) {
 }
 
 vec3 light = normalize(vec3(sin(scrollX), 3, cos(scrollX)));
-const float mint = 5. * hitThreshold;
+const float mint = 15. * hitThreshold;
 const float maxt = 1.;
 const float k = 8.;
 const float fogNear = 10.;

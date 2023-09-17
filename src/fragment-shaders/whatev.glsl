@@ -11,7 +11,7 @@ uniform float scrollY;
 
 const float hitThreshold = 0.00003;
 
-const int CAMERA_ITERATIONS = 400;
+const int CAMERA_ITERATIONS = 200;
 const int LIGHT_ITERATIONS= 100;
 
 const vec3 spaceRepetition = vec3(12, 5.15, 6);
@@ -32,38 +32,35 @@ vec3 getRay(vec2 xy) {
     return normalize((cameraDirection * vec4(pixel.x, pixel.y, 1, 0)).xyz);
 }
 
-vec3 opRepeat(vec3 p, vec3 distance) {
-    return mod(p + 0.5 * distance, distance) - 0.5 * distance;
+// 2D rotation function
+mat2 rot(float a) {
+	return mat2(cos(a),sin(a),-sin(a),cos(a));	
 }
 
-// see e.g. http://blog.hvidtfeldts.net/index.php/2012/05/distance-estimated-3d-fractals-part-viii-epilogue/
-// for more info
+// "Amazing Surface" fractal
+vec4 formula(vec4 p) {
+		p.xz = abs(p.xz+1.)-abs(p.xz-1.)-p.xz;
+		p.y-=.25;
+		p.xy*=rot(radians(35.));
+		p=p*2./clamp(dot(p.xyz,p.xyz),.2,1.);
+	return p;
+}
 
-const vec4 param_min = vec4(-0.8323, -0.694, -0.1045, 0.8067);
-const vec4 param_max = vec4(0.85, 2.0, 0.9, 0.93);
-const int FOLDING_NUMBER = 9;
-float doModel(vec3 p)
-{
-    p = opRepeat(p, spaceRepetition);
-    float k1, k2, rp2, rq2;
-    float scale = 1.0;
-    float orb = 1e4;
-    vec3 q = p;
-    for (int i = 0; i < FOLDING_NUMBER; i++)
-	{
-        p = (1.9 + .1 * sin(scrollY + .5)) * clamp(p, param_min.xyz, param_max.xyz) - p;
-	    q = 2. * fract(0.5 * q + 0.5) - 1.0;
-	    rp2 = dot(p, p);
-        rq2 = dot(q, q);
-	    k1 = max(param_min.w / rp2, 1.0);
-        k2 = max(param_min.w / rq2, 1.0);
-	    p *= k1;
-        q *= k2;
-	    scale *= k1;
-        orb = min(orb, rq2);
-	}
-    float lxy = length(p.xy);
-    return abs(0.5 * max(param_max.w - lxy, lxy * p.z / length(p)) / scale);
+// Distance function
+float doModel(vec3 pos) {
+	float hid=0.;
+	vec3 tpos=pos;
+	tpos.z=abs(3.-mod(tpos.z,6.));
+	vec4 p=vec4(tpos,1.);
+	for (int i=0; i<4; i++) {p=formula(p);}
+	float fr=(length(max(vec2(0.),p.yz-1.5))-1.)/p.w;
+	float ro=max(abs(pos.x+1.)-.3,pos.y-.35);
+		  ro=max(ro,-max(abs(pos.x+1.)-.1,pos.y-.5));
+	pos.z=abs(.25-mod(pos.z,.5));
+		  ro=max(ro,-max(abs(pos.z)-.2,pos.y-.3));
+		  ro=max(ro,-max(abs(pos.z)-.01,-pos.y+.32));
+	float d=min(fr,ro);
+	return d;
 }
 
 vec3 calcNormal(vec3 p, float h) {
@@ -167,7 +164,7 @@ void main() {
     int iterations;
     vec3 collision;
     float fog;
-    float lightStrength = trace(rotmat * (cameraPosition * 2.) + vec3(1.4, 9.5, 1.1), direction, collision, iterations, fog);
+    float lightStrength = trace(rotmat * (cameraPosition) + vec3(-1.,.7,0.), direction, collision, iterations, fog);
 
     vec3 fogColor = vec3(dot(direction, light));
 
