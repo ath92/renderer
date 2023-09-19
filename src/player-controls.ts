@@ -59,7 +59,7 @@ class PlayerControls {
     hasMovedSinceMousedown = false
     hasChanges = true
 
-    constructor(acceleration = 0.00010, friction = 0.12, mouseSensitivity = 0.15, touchSensitivity = 0.012) {
+    constructor(acceleration = 0.00050, friction = 0.12, mouseSensitivity = 0.15, touchSensitivity = 0.012) {
         // TODO: cleanup event listeners
         this.acceleration = acceleration;
         this.friction = friction;

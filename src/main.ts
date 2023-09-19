@@ -7,7 +7,7 @@ import playerControls from './player-controls'
 
 const urlParams = new URLSearchParams(window.location.search);
 const fractal = urlParams.get('fractal') || 'mandelbulb';
-let performance = parseInt(urlParams.get("performance") as string | null ?? "3")
+let performance = parseInt(urlParams.get("performance") as string | null ?? "0")
 
 const maxPerformance = 4
 
@@ -258,7 +258,12 @@ const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & Frame
 
 let isRendering = true
 let from: Framebuffer
+
+let avgFrameTime = 1000/60
+const numSamples = 20
 function loop() {
+  const start = Date.now()
+
   const state = playerControls.state
   const { fbo, shape, offsets } = precisionFbos[performance]
   const [source, target] = pingpong(frame)
@@ -266,8 +271,6 @@ function loop() {
   if (state.hasChanges) { 
     step = 0
   }
-
-  console.log(repeat)
 
   if (step < offsets.length) {
     const offset = offsets[step]
@@ -294,8 +297,28 @@ function loop() {
     drawToCanvas({
       inputTexture: target
     })
+    // not so nice hack to force syncronouuus drawing
+    target.use(() => regl.read({ width: 1, height: 1 }))
     isRendering = true
   } else isRendering = false
+
+  const frameTime = Date.now() - start
+  avgFrameTime = ((numSamples - 1) * avgFrameTime + frameTime) / numSamples
+
+  if (frame % 60 === 0) {
+    const fps = 1000 / avgFrameTime
+    console.log("fps", fps)
+    if (fps > 120) {
+      const nextPerformance = Math.max(0, performance - 1)
+      performance = nextPerformance
+      repeat = 2 ** nextPerformance
+    } else if (fps < 60) {
+      const nextPerformance = Math.min(maxPerformance - 1, performance + 1)
+      performance = nextPerformance
+      repeat = 2 ** nextPerformance
+    }
+  }
+
   requestAnimationFrame(() => loop())
 
   from = target
@@ -303,41 +326,5 @@ function loop() {
   step++
   frame++
 }
-
-const fpswindow = 1000
-
-function fpsMeter() {
-  let prevTime = Date.now(),
-      frames = 0;
-
-  requestAnimationFrame(function loop() {
-    const time = Date.now();
-    frames++;
-    if (time > prevTime + fpswindow) {
-      let fps = Math.round( ( frames * fpswindow ) / ( time - prevTime ) ) * (1000 / fpswindow);
-
-      if (isRendering) {
-        if (fps >= 60) {
-          const nextPerformance = Math.max(0, performance - 1)
-          performance = nextPerformance
-          repeat = 2 ** nextPerformance
-        } else if (fps < 50) {
-          const nextPerformance = Math.min(maxPerformance - 1, performance + 1)
-          performance = nextPerformance
-          repeat = 2 ** nextPerformance
-        }
-      }
-
-      console.info('FPS: ', fps);
-
-      prevTime = time;
-      frames = 0;
-    }
-
-    requestAnimationFrame(loop);
-  });
-}
-
-fpsMeter();
 
 loop()
