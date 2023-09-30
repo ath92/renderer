@@ -71,11 +71,11 @@ class PlayerControls {
         document.addEventListener('keydown', this.handleKeyboardEvent);
         document.addEventListener('keyup', this.handleKeyboardEvent);
 
-        document.addEventListener('mousedown', (e: MouseEvent) => {
+        document.addEventListener('mousedown', () => {
             this.isPanning = true;
         });
 
-        document.addEventListener('mouseup', (e) => {
+        document.addEventListener('mouseup', () => {
             this.isPanning = false;
         });
 

@@ -305,7 +305,7 @@ function loop() {
   const frameTime = Date.now() - start
   avgFrameTime = ((numSamples - 1) * avgFrameTime + frameTime) / numSamples
 
-  if (frame % 60 === 0) {
+  if (isRendering && frame % 60 === 0) {
     const fps = 1000 / avgFrameTime
     console.log("fps", fps)
     if (fps > 120) {
