@@ -103,14 +103,14 @@ float trace(vec3 origin, vec3 direction, out vec3 collision, out int iterations,
         return dot(direction, light);
     }
     collision = position;
-    vec3 n = calcNormal(collision, h);
+    vec3 n = calcNormal(collision, h * distanceTraveled);
     float t = mint;
     float res = 1.0;
     float pd = 1e1;
     for (int i = 0; i < LIGHT_ITERATIONS; i++) {
         position = collision + light * t;
         d = doModel(position);
-        if (d < hitThreshold){
+        if (d < hitThreshold * distanceTraveled){
             return 0.;
             // return (t - mint) / (maxt - mint);
         };
@@ -132,34 +132,8 @@ float occlusion(int iterations) {
     return occlusionLight;
 }
 
-// const float col = 0.05; // amount of coloring
-
-vec3 hsl2rgb( in vec3 c ) {
-    vec3 rgb = clamp( abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0 );
-    return c.z + c.y * (rgb-0.5)*(1.0-abs(2.0*c.z-1.0));
-}
-
-vec3 getColor(float it, float d) {
-    return hsl2rgb(vec3(
-        d,
-        0.6,
-        pow(it, 0.8)
-    ));
-}
-
-vec3 a = vec3(0.5, 0.5, 0.7);
-vec3 b = vec3(0.5, 0.5, 1.0);
-vec3 c =   vec3(6.0, 1.0, 0.0);
-vec3 d = vec3(1.1, 1.0, 1.);
-vec3 color(in float t)
-{
-    return a + b * cos(6.28318 * (c * t + d));
-}
-
-float blendLighten(float base, float blend) {
-	return max(blend,base);
-}
-
+vec3 yellow = vec3(1, .7, 0);
+vec3 up = normalize(rotmat * vec3(1., 1, .5)); // what
 
 void main() {
     vec3 direction = rotmat * getRay(gl_FragCoord.xy);
@@ -167,16 +141,24 @@ void main() {
     int iterations;
     vec3 collision;
     float fog;
-    float lightStrength = trace(rotmat * (cameraPosition * 2.) + vec3(1.4, 9.5, 1.1), direction, collision, iterations, fog);
+    vec3 origin = rotmat * (cameraPosition * 2.) + vec3(1.4, 9.5, 1.1);
+    float lightStrength = trace(origin, direction, collision, iterations, fog);
+
+    float dist = distance(origin, collision);
 
     vec3 fogColor = vec3(dot(direction, light));
 
-    vec3 normal = calcNormal(collision, hitThreshold);
+    vec3 normal = calcNormal(collision, hitThreshold * dist);
+    float colorThreshold = dot(normal, up);
 
     // float d = distance(collision, cameraPosition);
     float ol = .5;
-    vec3 c = color(normal.x * normal.y * normal.z);
     vec3 f = mix(vec3(pow(occlusion(iterations) + lightStrength, 2.)) * .5, fogColor , fog);
+
+    if (colorThreshold > 0.8) {
+        f *= yellow;
+    }
+
     gl_FragColor = vec4(
         f * 1.,
         1.

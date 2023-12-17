@@ -22,7 +22,7 @@ const searchDir = search.get("direction")
 
 
 type Mat3 = [number, number, number, number, number, number, number, number, number]
-const position = vec3.fromValues(...(searchPos ? searchPos.split(",").map((s) => parseFloat(s)) : [0, 0, -9]) as [number, number, number])
+const position = vec3.fromValues(...(searchPos ? searchPos.split(",").map((s) => parseFloat(s)) : [0, 0, 0]) as [number, number, number])
 const direction = mat3.fromValues(...(searchDir ? searchDir.split(",").map((s) => parseFloat(s)) : mat3.identity(mat3.create())) as Mat3)
 
 const dirVec = vec3.fromValues(0, 0, 1)
