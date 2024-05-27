@@ -1,6 +1,8 @@
 # Realtime 3D fractal explorer
 
-This is an interactive 3d fractal explorer. The fractals are represented using Signed Distance Functionns, and  rendered using a technique called raymarching. The images are rendered using WebGL (through a library called regl).
+[Check out the demo](https://progressive-renderer.netlify.app/?fractal=klein2)
+
+This is an interactive 3d fractal explorer. The fractals are represented using Signed Distance Functions, and  rendered using a technique called raymarching. The images are rendered using WebGL (through a library called regl).
 
 It looks like this:
 
