@@ -19,9 +19,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    "types": [
-      "vite-plugin-glsl/ext"
-    ]
+    "types": ["vite-plugin-glsl/ext", "@webgpu/types"]
   },
   "include": ["src"]
 }

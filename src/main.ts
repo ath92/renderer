@@ -3,6 +3,8 @@ import playerControls from "./player-controls";
 import { initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
+import { initThreeScene } from "./three-init";
+import { sceneGraph } from "./blob-tree";
 //@ts-ignore
 import PoissonDisk from "fast-2d-poisson-disk-sampling";
 
@@ -16,13 +18,22 @@ const maxPerformance = 4;
 
 let repeat = 2 ** performance;
 
-const canvas = document.createElement("canvas");
-document.querySelector("#app")!.appendChild(canvas);
+const webgpuCanvas = document.getElementById(
+  "webgpu-canvas",
+) as HTMLCanvasElement;
+const threejsCanvas = document.getElementById(
+  "threejs-canvas",
+) as HTMLCanvasElement;
+
 // resize to prevent rounding errors
 const width = window.innerWidth - (window.innerWidth % 8);
 const height = window.innerHeight - (window.innerHeight % 8);
-canvas.width = width;
-canvas.height = height;
+webgpuCanvas.width = width;
+webgpuCanvas.height = height;
+threejsCanvas.width = width;
+threejsCanvas.height = height;
+
+initThreeScene(threejsCanvas);
 
 let frame = 0;
 let step = 0;
@@ -50,7 +61,7 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 });
 
 async function main() {
-  const webGPU = await initWebGPU(canvas);
+  const webGPU = await initWebGPU(webgpuCanvas);
   if (!webGPU) return;
 
   const { device, context, format } = webGPU;
@@ -81,6 +92,14 @@ async function main() {
     size: Math.ceil(upsampleUniformBufferSize / 32) * 32,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
+
+  // Storage buffer for the blob tree
+  const flattenedTree = sceneGraph.serializeTreeForWebGPU();
+  const treeBuffer = createBuffer(
+    device,
+    flattenedTree,
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  );
 
   // Load shaders
   const passThroughVertCode = await (
@@ -127,11 +146,20 @@ async function main() {
       visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
       buffer: { type: "uniform" },
     },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.FRAGMENT,
+      buffer: { type: "read-only-storage" },
+    },
   ]);
   const fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
     {
       binding: 0,
       resource: { buffer: uniformBuffer },
+    },
+    {
+      binding: 1,
+      resource: { buffer: treeBuffer },
     },
   ]);
 
@@ -329,7 +357,7 @@ async function main() {
         state.scrollY, // scrollY
         0,
       ]);
-      console.log(uniformValues);
+
       updateBuffer(device, uniformBuffer, uniformValues);
 
       const commandEncoder = device.createCommandEncoder();

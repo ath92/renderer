@@ -29,6 +29,6 @@ fn main(@location(0) uv: vec2<f32>, @builtin(position) fragCoord: vec4<f32>) -> 
     let d = distance(m, u.offset) / maxDist;
     let dist = min(d, 1.00 - d);
 
-    let weight = clamp(pow((1.0 - dist), pow(u.step, sqrt(2.0) / 2.0)), 0.0, 1.0);
+    let weight = 1.0 / (u.step + 1.);
     return mix(current, sample, weight);
 }
