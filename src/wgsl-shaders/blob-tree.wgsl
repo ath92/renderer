@@ -213,7 +213,6 @@ fn get_ray_direction(fragCoord: vec4<f32>) -> vec3<f32> {
 
 @fragment
 fn main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Setup ray for coarse raymarching
     let uv = in.uv;
     let config = raymarch_config();
 
@@ -221,14 +220,13 @@ fn main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ray_origin = u.cameraPosition;
     let ray_dir = get_ray_direction(in.position);
 
-    // Perform fine raymarching starting from the coarse position with BVH acceleration
     var result = raymarch_from_position_bvh_2(ray_origin, ray_dir, config);
 
     if (result.distance < config.max_distance) {
         // Simple lighting calculation using surface normal from raymarch result
         let normal = result.normal;
-        let light_dir = cross(ray_dir, normalize(vec3<f32>(-1.0, 1.0, 1.)));
-        let diffuse = max(dot(normal, light_dir), 0.1);
+        let light_dir = normalize(cross(ray_dir, vec3(1., 0., -0.)) + ray_dir);
+        let diffuse = max(dot(-normal, light_dir), 0.1);
 
         return vec4<f32>(diffuse, diffuse, diffuse, 1.0);
     }
