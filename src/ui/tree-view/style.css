@@ -1,0 +1,56 @@
+#tree-view {
+    color: white;
+    padding: 10px;
+}
+
+.tree-node {
+    margin-left: 10px;
+    padding: 2px 5px;
+    border-left: 1px solid #ccc;
+}
+
+.leaf-node {
+    position: relative;
+    padding-left: 20px;
+    cursor: pointer;
+    height: 25px;
+    display: flex;
+    align-items: center;
+}
+
+.leaf-node:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.leaf-node::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0px;
+    transform: translateY(-50%);
+    width: 15px;
+    height: 1px;
+    background-color: #ccc;
+}
+
+.operation-node .node-details {
+    display: flex;
+    gap: 10px;
+    cursor: pointer;
+    height: 25px;
+    align-items: center;
+    padding-left: 5px;
+}
+
+.operation-node .node-details span:first-child {
+    font-weight: bold;
+}
+
+.operation-node .node-details:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.operation-type {
+    font-style: italic;
+    color: #aaa;
+}

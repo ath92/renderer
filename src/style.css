@@ -33,4 +33,7 @@ canvas {
     backdrop-filter: blur(10px);
     border-radius: 5px;
     z-index: 3;
+    overflow-y: auto;
+    font-family: sans-serif;
+    font-size: 12px;
 }

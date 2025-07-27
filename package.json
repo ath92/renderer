@@ -15,6 +15,7 @@
     "vite-plugin-glsl": "^1.1.2"
   },
   "dependencies": {
+    "@preact/signals": "^2.2.1",
     "@webgpu/types": "^0.1.64",
     "fast-2d-poisson-disk-sampling": "^1.0.3",
     "gl-matrix": "^3.4.3",

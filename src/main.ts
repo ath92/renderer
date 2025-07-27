@@ -1,5 +1,5 @@
 import "./style.css";
-import { initUI } from "./ui";
+import { initUI } from "./ui/index";
 import playerControls from "./player-controls";
 import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
