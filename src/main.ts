@@ -1,6 +1,6 @@
 import "./style.css";
 import playerControls from "./player-controls";
-import { initWebGPU } from "./webgpu-init";
+import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
 import { initThreeScene } from "./three-init";
@@ -60,6 +60,13 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   }
 });
 
+var treeBuffer: GPUBuffer | null = null;
+
+export function updateTreeBuffer(flattenedTree: Float32Array) {
+  if (!treeBuffer) return;
+  updateBuffer(getDevice(), treeBuffer, flattenedTree);
+}
+
 async function main() {
   const webGPU = await initWebGPU(webgpuCanvas);
   if (!webGPU) return;
@@ -95,7 +102,7 @@ async function main() {
 
   // Storage buffer for the blob tree
   const flattenedTree = sceneGraph.serializeTreeForWebGPU();
-  const treeBuffer = createBuffer(
+  treeBuffer = createBuffer(
     device,
     flattenedTree,
     GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -453,6 +460,7 @@ async function main() {
     }
 
     const FRAMES = 60;
+    const MARGIN = 2;
     if (frame % FRAMES === 0 && state.hasChanges) {
       const current = Date.now();
       const diff = current - start;
@@ -462,9 +470,9 @@ async function main() {
       console.log(frame, fps);
       // console.log("fps", fps);
       let nextPerformance: number = performance;
-      if (fps > 120) {
+      if (fps > 120 - MARGIN) {
         nextPerformance = Math.max(0, performance - 1);
-      } else if (fps < 30) {
+      } else if (fps < 30 - MARGIN) {
         nextPerformance = Math.min(maxPerformance - 1, performance + 1);
       }
       // nextPerformance = 3;

@@ -1,4 +1,5 @@
 import { mat4, vec3 } from "gl-matrix";
+import { updateTreeBuffer } from "./main";
 
 // Using a type alias for the ID for clarity
 type NodeId = string;
@@ -72,6 +73,11 @@ const AABB_UTILITIES = {
   expandByAABB: (aabb: AABB, otherAABB: AABB): AABB => {
     vec3.min(aabb.min, aabb.min, otherAABB.min);
     vec3.max(aabb.max, aabb.max, otherAABB.max);
+    return aabb;
+  },
+  expandByScalar: (aabb: AABB, scalar: number): AABB => {
+    vec3.sub(aabb.min, aabb.min, vec3.fromValues(scalar, scalar, scalar));
+    vec3.add(aabb.max, aabb.max, vec3.fromValues(scalar, scalar, scalar));
     return aabb;
   },
   calculateSphereAABB: (transform: mat4, radius: number): AABB => {
@@ -224,15 +230,19 @@ class SceneGraph {
       for (let child_id of node.children) {
         const child = this.getNode(child_id);
         if (!child) throw new Error("child not found");
-        console.log(child_id, child.type, child.aabb);
         AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
       }
+      AABB_UTILITIES.expandByScalar(newAABB, node.smoothing * 4);
     }
 
     node.aabb = newAABB;
 
     if (node.parent) {
       this.updateNodeAABB(node.parent);
+    } else {
+      // root
+      console.log("got there!");
+      updateTreeBuffer(this.serializeTreeForWebGPU());
     }
   }
   updateLeafNodeProperties(

@@ -1,20 +1,21 @@
 import * as THREE from "three";
 import { sceneGraph } from "./blob-tree";
 import playerControls from "./player-controls";
-
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { OrbitControls } from "three/examples/jsm/Addons.js";
 const scene = new THREE.Scene();
 
 const wireframeMaterial = new THREE.MeshBasicMaterial({
   color: 0x00ff00,
   wireframe: true,
-  opacity: 0.01,
+  opacity: 0.1,
   transparent: true,
 });
 
-let sphere_ids = new Set<string>();
+let spheres = new Set<THREE.Mesh>();
 
 export function syncSpheres() {
-  const new_sphere_ids = new Set<string>();
+  const new_spheres = new Set<THREE.Mesh>();
   sceneGraph.traverse((node) => {
     if (node.type === "leaf") {
       let sphere: THREE.Mesh;
@@ -32,18 +33,24 @@ export function syncSpheres() {
         node.transform[13],
         node.transform[14],
       );
-      new_sphere_ids.add(node.id);
+      new_spheres.add(sphere);
     }
   });
-  for (let id of sphere_ids) {
-    if (!new_sphere_ids.has(id)) {
-      const obj = scene.getObjectByName(id) as THREE.Mesh;
-      obj.geometry.dispose();
-      obj.remove();
+  for (let sphere of spheres) {
+    if (!new_spheres.has(sphere)) {
+      sphere.geometry.dispose();
+      sphere.remove();
     }
   }
-  sphere_ids = new_sphere_ids;
+  spheres = new_spheres;
 }
+
+var orbit_controls: OrbitControls | null = null;
+
+export const get_orbit_controls = () => {
+  if (!orbit_controls) throw new Error("orbit not init");
+  return orbit_controls;
+};
 
 export function initThreeScene(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(
@@ -57,6 +64,50 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   renderer.setSize(canvas.width, canvas.height);
 
   syncSpheres();
+
+  const transform_controls = new TransformControls(camera);
+  scene.add(transform_controls.getHelper());
+  transform_controls.connect(canvas);
+
+  const raycaster = new THREE.Raycaster();
+
+  const onClick = (e: MouseEvent) => {
+    const x = ((e.clientX - window.innerWidth / 2) / window.innerWidth) * 2;
+    const y = ((e.clientY - window.innerHeight / 2) / -window.innerHeight) * 2;
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+
+    const intersections = raycaster.intersectObjects([...spheres]);
+    const first = intersections[0];
+
+    console.log(first);
+
+    if (first) {
+      transform_controls.attach(first.object);
+    } else {
+      transform_controls.detach();
+    }
+  };
+
+  function worldPositionChanged(e: THREE.Event) {
+    const obj = transform_controls.object;
+    if (!obj) return;
+
+    const node = sceneGraph.getNode(obj.name);
+    if (!node || node.type !== "leaf") return;
+
+    const transform = obj.matrixWorld.toArray();
+
+    sceneGraph.updateLeafNodeProperties(obj.name, {
+      transform,
+    });
+  }
+
+  transform_controls.addEventListener("change", worldPositionChanged);
+
+  window.addEventListener("click", onClick);
+
+  orbit_controls = new OrbitControls(camera);
+  orbit_controls.connect(canvas);
 
   function animate() {
     requestAnimationFrame(animate);
