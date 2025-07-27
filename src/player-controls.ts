@@ -75,6 +75,7 @@ class PlayerControls {
   isTouching: boolean = false;
   hasMovedSinceMousedown = false;
   hasChanges = true;
+  enabled = true;
 
   constructor(
     acceleration = 0.0005,
@@ -110,6 +111,7 @@ class PlayerControls {
     );
 
     document.addEventListener("mousemove", (e) => {
+      if (!this.enabled) return;
       if (!this.isPanning && !this.isTouching) return;
       this.hasMovedSinceMousedown = true;
       this.mouseX += e.movementX * this.mouseSensitivity;
@@ -118,6 +120,7 @@ class PlayerControls {
     });
 
     document.addEventListener("touchstart", (e) => {
+      if (!this.enabled) return;
       this.directionKeys.forward = true;
       this.hasChanges = true;
       this.isTouching = true;
@@ -129,6 +132,7 @@ class PlayerControls {
     });
 
     document.addEventListener("touchmove", (e) => {
+      if (!this.enabled) return;
       const { x, y } = getTouchEventCoordinates(e);
       this.touchX = x;
       this.touchY = y;
@@ -141,6 +145,7 @@ class PlayerControls {
     };
 
     window.addEventListener("wheel", (e) => {
+      if (!this.enabled) return;
       this.scrollY += e.deltaY / 5000;
       this.scrollX += e.deltaX / 5000;
       this.hasChanges = true;
@@ -154,6 +159,7 @@ class PlayerControls {
   }
 
   handleKeyboardEvent = (keyboardEvent: KeyboardEvent) => {
+    if (!this.enabled) return;
     const { code, type, shiftKey } = keyboardEvent;
     const value = type === "keydown";
     if (code === "KeyW" || code === "ArrowUp")
@@ -178,6 +184,7 @@ class PlayerControls {
   time = performance.now();
 
   loop() {
+    requestAnimationFrame(() => this.loop());
     if (this.isTouching) {
       this.mouseX += (this.touchX - this.touchStartX) * this.touchSensitivity;
       this.mouseY += (this.touchY - this.touchStartY) * this.touchSensitivity;
@@ -215,8 +222,6 @@ class PlayerControls {
     vec3.add(this.position, this.position, this.speed);
 
     this.time = now;
-
-    requestAnimationFrame(() => this.loop());
   }
 
   get state() {

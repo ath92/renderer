@@ -2,13 +2,12 @@ import * as THREE from "three";
 import { sceneGraph } from "./blob-tree";
 import playerControls from "./player-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
-import { OrbitControls } from "three/examples/jsm/Addons.js";
 const scene = new THREE.Scene();
 
 const wireframeMaterial = new THREE.MeshBasicMaterial({
   color: 0x00ff00,
   wireframe: true,
-  opacity: 0.1,
+  opacity: 0.01,
   transparent: true,
 });
 
@@ -44,13 +43,6 @@ export function syncSpheres() {
   }
   spheres = new_spheres;
 }
-
-var orbit_controls: OrbitControls | null = null;
-
-export const get_orbit_controls = () => {
-  if (!orbit_controls) throw new Error("orbit not init");
-  return orbit_controls;
-};
 
 export function initThreeScene(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(
@@ -88,6 +80,11 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     }
   };
 
+  transform_controls.addEventListener("dragging-changed", ({ value }) => {
+    console.log("the thing", value);
+    playerControls.enabled = !value;
+  });
+
   function worldPositionChanged(e: THREE.Event) {
     const obj = transform_controls.object;
     if (!obj) return;
@@ -100,14 +97,13 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     sceneGraph.updateLeafNodeProperties(obj.name, {
       transform,
     });
+
+    playerControls.hasChanges = true;
   }
 
   transform_controls.addEventListener("change", worldPositionChanged);
 
   window.addEventListener("click", onClick);
-
-  orbit_controls = new OrbitControls(camera);
-  orbit_controls.connect(canvas);
 
   function animate() {
     requestAnimationFrame(animate);
