@@ -66,8 +66,8 @@ type FlattenedNode = SceneNode & {
 // --- AABB Utility Functions (same as before, no changes needed) ---
 const AABB_UTILITIES = {
   create: (): AABB => ({
-    min: vec3.fromValues(Infinity, Infinity, Infinity),
-    max: vec3.fromValues(-Infinity, -Infinity, -Infinity),
+    min: vec3.fromValues(0, 0, 0),
+    max: vec3.fromValues(0, 0, 0),
   }),
   expandByAABB: (aabb: AABB, otherAABB: AABB): AABB => {
     vec3.min(aabb.min, aabb.min, otherAABB.min);
@@ -92,7 +92,7 @@ const AABB_UTILITIES = {
 
 class SceneGraph {
   private nodes: Map<NodeId, SceneNode>;
-  private rootId: NodeId | null;
+  public rootId: NodeId | null;
   private nextId: number;
 
   constructor() {
@@ -220,17 +220,12 @@ class SceneGraph {
       newAABB = AABB_UTILITIES.calculateSphereAABB(node.transform, node.scale);
     } else {
       newAABB = AABB_UTILITIES.create();
-      let hasChildrenWithAABB = false;
 
-      this.traverse((descendantNode) => {
-        if (descendantNode.type === "leaf") {
-          AABB_UTILITIES.expandByAABB(newAABB, descendantNode.aabb);
-          hasChildrenWithAABB = true;
-        }
-      }, nodeId);
-
-      if (!hasChildrenWithAABB) {
-        newAABB = AABB_UTILITIES.create();
+      for (let child_id of node.children) {
+        const child = this.getNode(child_id);
+        if (!child) throw new Error("child not found");
+        console.log(child_id, child.type, child.aabb);
+        AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
       }
     }
 
@@ -588,13 +583,44 @@ export function generateRandomBlobTree(
       Math.random() < 0.75 ||
       parentCandidates.length >= numLeaves - leavesCreated;
 
+    const parent_is_empty = parent.children.length === 0;
+
+    const parent_bbox_size = parent_is_empty
+      ? vec3.fromValues(2, 2, 2)
+      : vec3.sub(vec3.create(), parent.aabb.max, parent.aabb.min);
+    const parent_bbox_center = parent_is_empty
+      ? vec3.fromValues(1, 1, 1)
+      : vec3.scale(
+          vec3.create(),
+          vec3.add(vec3.create(), parent.aabb.max, parent.aabb.min),
+          0.5,
+        );
+
+    // console.log(parent_is_empty, parent, parent_bbox_size, parent_bbox_center);
     if (shouldAddLeaf) {
       const position = vec3.fromValues(
-        (Math.random() - 0.5) * 12,
-        (Math.random() - 0.5) * 12,
-        (Math.random() - 0.5) * 12,
+        (Math.random() - 0.5) * 1.6 * parent_bbox_size[0] +
+          parent_bbox_center[0],
+        (Math.random() - 0.5) * 1.6 * parent_bbox_size[1] +
+          parent_bbox_center[1],
+        (Math.random() - 0.5) * 1.6 * parent_bbox_size[2] +
+          parent_bbox_center[2],
       );
-      const scale = Math.random() * 1.2 + 0.2;
+      console.log(
+        parent,
+        Math.min(
+          Math.min(parent_bbox_size[0], parent_bbox_size[1]),
+          parent_bbox_size[2],
+        ),
+      );
+      const scale =
+        Math.random() *
+          Math.min(
+            Math.min(parent_bbox_size[0], parent_bbox_size[1]),
+            parent_bbox_size[2],
+          ) *
+          0.5 +
+        0.1;
       const transform = mat4.fromTranslation(mat4.create(), position);
       sceneGraph.addLeafNode(
         { transform, scale, name: `Leaf-${leavesCreated}` },
@@ -621,4 +647,4 @@ export function generateRandomBlobTree(
   return sceneGraph;
 }
 
-export const sceneGraph = generateRandomBlobTree(100, 5);
+export const sceneGraph = generateRandomBlobTree(50, 5);

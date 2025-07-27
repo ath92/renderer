@@ -7,11 +7,14 @@ const scene = new THREE.Scene();
 const wireframeMaterial = new THREE.MeshBasicMaterial({
   color: 0x00ff00,
   wireframe: true,
-  opacity: 0.1,
+  opacity: 0.01,
   transparent: true,
 });
 
-export function upsertLeaves() {
+let sphere_ids = new Set<string>();
+
+export function syncSpheres() {
+  const new_sphere_ids = new Set<string>();
   sceneGraph.traverse((node) => {
     if (node.type === "leaf") {
       let sphere: THREE.Mesh;
@@ -29,8 +32,17 @@ export function upsertLeaves() {
         node.transform[13],
         node.transform[14],
       );
+      new_sphere_ids.add(node.id);
     }
   });
+  for (let id of sphere_ids) {
+    if (!new_sphere_ids.has(id)) {
+      const obj = scene.getObjectByName(id) as THREE.Mesh;
+      obj.geometry.dispose();
+      obj.remove();
+    }
+  }
+  sphere_ids = new_sphere_ids;
 }
 
 export function initThreeScene(canvas: HTMLCanvasElement) {
@@ -44,7 +56,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
   renderer.setSize(canvas.width, canvas.height);
 
-  upsertLeaves();
+  syncSpheres();
 
   function animate() {
     requestAnimationFrame(animate);

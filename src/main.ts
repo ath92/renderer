@@ -464,7 +464,7 @@ async function main() {
       let nextPerformance: number = performance;
       if (fps > 120) {
         nextPerformance = Math.max(0, performance - 1);
-      } else if (fps < 60) {
+      } else if (fps < 30) {
         nextPerformance = Math.min(maxPerformance - 1, performance + 1);
       }
       // nextPerformance = 3;
