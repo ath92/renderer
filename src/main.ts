@@ -461,24 +461,26 @@ async function main() {
 
     const FRAMES = 60;
     const MARGIN = 2;
-    if (frame % FRAMES === 0 && state.hasChanges) {
+    if (frame % FRAMES === 0) {
       const current = Date.now();
       const diff = current - start;
       start = current;
-      const avgFrameTime = diff / FRAMES;
-      const fps = 1000 / avgFrameTime;
-      console.log(frame, fps);
-      // console.log("fps", fps);
-      let nextPerformance: number = performance;
-      if (fps > 120 - MARGIN) {
-        nextPerformance = Math.max(0, performance - 1);
-      } else if (fps < 30 - MARGIN) {
-        nextPerformance = Math.min(maxPerformance - 1, performance + 1);
+      if (state.hasChanges) {
+        const avgFrameTime = diff / FRAMES;
+        const fps = 1000 / avgFrameTime;
+        console.log(frame, fps);
+        // console.log("fps", fps);
+        let nextPerformance: number = performance;
+        if (fps > 60 - MARGIN) {
+          nextPerformance = Math.max(0, performance - 1);
+        } else if (fps < 30 - MARGIN) {
+          nextPerformance = Math.min(maxPerformance - 1, performance + 1);
+        }
+        // nextPerformance = 3;
+        performance = nextPerformance;
+        repeat = 2 ** nextPerformance;
+        console.log(performance);
       }
-      // nextPerformance = 3;
-      performance = nextPerformance;
-      repeat = 2 ** nextPerformance;
-      console.log(performance);
     }
 
     requestAnimationFrame(loop);

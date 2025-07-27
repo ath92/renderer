@@ -81,7 +81,6 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   };
 
   transform_controls.addEventListener("dragging-changed", ({ value }) => {
-    console.log("the thing", value);
     playerControls.enabled = !value;
   });
 
@@ -98,7 +97,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
       transform,
     });
 
-    playerControls.hasChanges = true;
+    playerControls.hasChanges = transform_controls.dragging;
   }
 
   transform_controls.addEventListener("change", worldPositionChanged);
