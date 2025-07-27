@@ -18,6 +18,7 @@
     "@webgpu/types": "^0.1.64",
     "fast-2d-poisson-disk-sampling": "^1.0.3",
     "gl-matrix": "^3.4.3",
+    "preact": "^10.26.9",
     "three": "^0.178.0"
   }
 }
