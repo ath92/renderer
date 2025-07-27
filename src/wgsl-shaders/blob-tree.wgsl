@@ -90,16 +90,18 @@ fn combine_sphere_into_scene_result(
     }
 }
 
-fn ray_point_distance(ray_origin: vec3<f32>, ray_dir: vec3<f32>, point: vec3<f32>) -> f32 {
-    let V = point - ray_origin;
-    let t = dot(V, ray_dir);
+fn ray_aabb_intersection(ray_origin: vec3<f32>, ray_dir: vec3<f32>, aabb_min: vec3<f32>, aabb_max: vec3<f32>) -> bool {
+    let inv_dir = 1.0 / ray_dir;
+    let tmin = (aabb_min - ray_origin) * inv_dir;
+    let tmax = (aabb_max - ray_origin) * inv_dir;
 
-    if (t < 0.0) {
-        return length(V);
-    } else {
-        let closestPointOnRay = ray_origin + t * ray_dir;
-        return distance(point, closestPointOnRay);
-    }
+    let t1 = min(tmin, tmax);
+    let t2 = max(tmin, tmax);
+
+    let t_near = max(max(t1.x, t1.y), t1.z);
+    let t_far = min(min(t2.x, t2.y), t2.z);
+
+    return t_near <= t_far;
 }
 
 fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) -> SceneSdfResult {
@@ -136,16 +138,12 @@ fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) ->
             // Exit the current node
             index = i32(node.tree_indices.y);
         } else {
-            let b = (node.aabb_max.xyz - node.aabb_min.xyz) / 2.;
-            let aabb_center = node.aabb_min.xyz + b;
-            let dist = ray_point_distance(point, ray_dir, aabb_center);
-            if (dist < length(b)) {
+            if (ray_aabb_intersection(point, ray_dir, node.aabb_min.xyz, node.aabb_max.xyz)) {
                 // If AABB test passes, proceed to entry_index (go down the tree branch)
                 index = i32(node.tree_indices.x);
             } else {
                 // If AABB test fails, proceed to exit_index (skip this subtree, proceed to next sibling)
                 index = i32(node.tree_indices.y);
-                aabb_min_dist = min(aabb_min_dist, dist);
             }
         }
     }
@@ -165,9 +163,9 @@ struct RaymarchConfig {
 
 fn raymarch_config() -> RaymarchConfig {
     var config: RaymarchConfig;
-    config.max_steps = 50;
+    config.max_steps = 100;
     config.max_distance = 100.;
-    config.surface_threshold = 0.001;
+    config.surface_threshold = 0.01;
     return config;
 }
 
@@ -208,8 +206,8 @@ fn raymarch_from_position_bvh_2(start_pos: vec3<f32>, ray_dir: vec3<f32>, config
 }
 
 fn get_ray_direction(fragCoord: vec4<f32>) -> vec3<f32> {
-    let normalizedCoords = fragCoord.xy - vec2<f32>(0.5) + (u.offset / u.repeat);
-    let pixel = (normalizedCoords - 0.5 * u.screenSize) / min(u.screenSize.x, u.screenSize.y);
+    let normalizedCoords = fragCoord.xy - vec2<f32>(0.) + (u.offset / u.repeat);
+    let pixel = (normalizedCoords - u.screenSize / 2.) / min(u.screenSize.x, u.screenSize.y);
     return normalize((u.cameraDirection * vec4<f32>(pixel.x, -pixel.y, 1.0, 0.0)).xyz);
 }
 

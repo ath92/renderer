@@ -75,7 +75,7 @@ async function main() {
   // Uniform buffer for SDF uniforms
   // This will be updated per frame/per tile
   const uniformBufferSize = 128; // Total size of SDFUniforms struct in WGSL, accounting for alignment and padding.
-  console.log(uniformBufferSize);
+
   const uniformBuffer = device.createBuffer({
     size: Math.ceil(uniformBufferSize / 32) * 32,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -105,35 +105,20 @@ async function main() {
   const passThroughVertCode = await (
     await fetch("/src/wgsl-shaders/pass-through.wgsl")
   ).text();
-  console.log("passThroughVertCode:", passThroughVertCode);
+
   const passThroughVertModule = device.createShaderModule({
     label: "Pass Through Vertex Shader",
     code: passThroughVertCode,
   });
 
-  const fractalFragCode = await (
-    await fetch(`/src/wgsl-shaders/${fractal}.wgsl`)
-  ).text();
-  console.log("fractalFragCode:", fractalFragCode);
-  let fractalFragModule: GPUShaderModule;
-  if (fractal === "klein2") {
-    fractalFragModule = device.createShaderModule({
-      label: "Fractal Fragment Shader",
-      code: await (
-        await fetch("/src/wgsl-shaders/klein2_revisited.wgsl")
-      ).text(),
-    });
-  } else {
-    fractalFragModule = device.createShaderModule({
-      label: "Fractal Fragment Shader",
-      code: await (await fetch(`/src/wgsl-shaders/${fractal}.wgsl`)).text(),
-    });
-  }
+  let fractalFragModule: GPUShaderModule = device.createShaderModule({
+    label: "Fractal Fragment Shader",
+    code: await (await fetch(`/src/wgsl-shaders/${fractal}.wgsl`)).text(),
+  });
 
   const upsampleFragCode = await (
     await fetch("/src/wgsl-shaders/upsample.wgsl")
   ).text();
-  console.log("upsampleFragCode:", upsampleFragCode);
   const upsampleFragModule = device.createShaderModule({
     label: "Upsample Fragment Shader",
     code: upsampleFragCode,
@@ -221,11 +206,21 @@ async function main() {
       visibility: GPUShaderStage.FRAGMENT,
       sampler: { type: "filtering" },
     },
+    {
+      binding: 4,
+      visibility: GPUShaderStage.FRAGMENT,
+      sampler: { type: "non-filtering" },
+    },
   ]);
 
   const textureSampler = device.createSampler({
     magFilter: "linear",
     minFilter: "linear",
+  });
+
+  const nearestSampler = device.createSampler({
+    magFilter: "nearest",
+    minFilter: "nearest",
   });
 
   // Create render pipeline for upsampling
@@ -291,7 +286,7 @@ async function main() {
 
       const offsets: [number, number][] = new PoissonDisk({
         shape: [repeat, repeat],
-        radius: 0.2,
+        radius: 0.1,
       }).fill();
 
       shuffleArray(offsets);
@@ -320,13 +315,11 @@ async function main() {
     frame % 2 === 0 ? [screenTex1, screenTex2] : [screenTex2, screenTex1];
 
   let from: GPUTexture;
-  let avgFrameTime = 1000 / 60;
-  const numSamples = 20;
+  let start = Date.now();
 
   function loop() {
-    const start = Date.now();
-
     const state = playerControls.state;
+    playerControls.hasChanges = false;
     const { fbo, shape, offsets } = precisionFbos[performance];
     const [source, target] = pingpong(frame);
     if (!from) from = source;
@@ -412,6 +405,10 @@ async function main() {
             binding: 3,
             resource: textureSampler,
           },
+          {
+            binding: 4,
+            resource: nearestSampler,
+          },
         ],
       );
 
@@ -455,21 +452,25 @@ async function main() {
       device.queue.submit([commandEncoder.finish()]);
     }
 
-    const frameTime = Date.now() - start;
-    avgFrameTime = ((numSamples - 1) * avgFrameTime + frameTime) / numSamples;
-
-    if (frame % 60 === 0) {
+    const FRAMES = 60;
+    if (frame % FRAMES === 0 && state.hasChanges) {
+      const current = Date.now();
+      const diff = current - start;
+      start = current;
+      const avgFrameTime = diff / FRAMES;
       const fps = 1000 / avgFrameTime;
-      console.log("fps", fps);
+      console.log(frame, fps);
+      // console.log("fps", fps);
+      let nextPerformance: number = performance;
       if (fps > 120) {
-        const nextPerformance = Math.max(0, performance - 1);
-        performance = nextPerformance;
-        repeat = 2 ** nextPerformance;
+        nextPerformance = Math.max(0, performance - 1);
       } else if (fps < 60) {
-        const nextPerformance = Math.min(maxPerformance - 1, performance + 1);
-        performance = nextPerformance;
-        repeat = 2 ** nextPerformance;
+        nextPerformance = Math.min(maxPerformance - 1, performance + 1);
       }
+      // nextPerformance = 3;
+      performance = nextPerformance;
+      repeat = 2 ** nextPerformance;
+      console.log(performance);
     }
 
     requestAnimationFrame(loop);

@@ -34,7 +34,7 @@ type Mat3 = [
 const position = vec3.fromValues(
   ...((searchPos
     ? searchPos.split(",").map((s) => parseFloat(s))
-    : [0, 0, -5]) as [number, number, number]),
+    : [0, 0, 5]) as [number, number, number]),
 );
 const direction = mat3.fromValues(
   ...((searchDir
@@ -185,7 +185,7 @@ class PlayerControls {
     this.mouseY = Math.min(this.mouseY, 90);
     this.mouseY = Math.max(this.mouseY, -90);
 
-    quat.fromEuler(this.direction, this.mouseY, this.mouseX, 0);
+    quat.fromEuler(this.direction, this.mouseY, this.mouseX + 180, 0);
 
     const now = performance.now();
     const timeDiff = now - this.time;
@@ -221,14 +221,22 @@ class PlayerControls {
 
   get state() {
     const hasChanges = this.hasChanges;
-    this.hasChanges = false;
+    // this.hasChanges = false;
+    //
+    const cameraDirection = mat4.fromQuat(mat4.create(), this.direction);
+    const cameraMatrix = mat4.translate(
+      mat4.create(),
+      cameraDirection,
+      this.position,
+    );
     return {
       hasChanges,
       scrollX: this.scrollX,
       scrollY: this.scrollY,
       cameraPosition: [...this.position],
-      cameraDirection: mat4.fromQuat(mat4.create(), this.direction),
+      cameraDirection,
       cameraDirectionQuat: [...this.direction],
+      cameraMatrix,
     };
   }
 }

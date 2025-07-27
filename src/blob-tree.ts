@@ -90,8 +90,6 @@ const AABB_UTILITIES = {
   },
 };
 
-// --- Tree Management Class (Previous methods omitted for brevity, assume they are still there) ---
-
 class SceneGraph {
   private nodes: Map<NodeId, SceneNode>;
   private rootId: NodeId | null;
@@ -331,11 +329,33 @@ class SceneGraph {
         if (parentNode && parentNode.type === "operation") {
           const siblings = parentNode.children;
           const selfIndexInSiblings = siblings.indexOf(nodeId);
-          if (
-            selfIndexInSiblings !== -1 &&
-            selfIndexInSiblings < siblings.length - 1
-          ) {
+
+          if (selfIndexInSiblings < siblings.length - 1) {
+            // If it's not the last child, the exit is the next sibling.
             exit = nodeIndexMap.get(siblings[selfIndexInSiblings + 1])!;
+          } else {
+            // If it is the last child, we need to find the exit of the parent.
+            // This means finding the next sibling of an ancestor.
+            let ancestorId = originalNode.parent;
+            while (ancestorId) {
+              const ancestorNode = this.nodes.get(ancestorId);
+              if (!ancestorNode || !ancestorNode.parent) {
+                // Reached the root or an orphaned node, no further exit.
+                break;
+              }
+
+              const grandparentNode = this.nodes.get(ancestorNode.parent);
+              if (grandparentNode && grandparentNode.type === "operation") {
+                const parentSiblings = grandparentNode.children;
+                const parentIndex = parentSiblings.indexOf(ancestorId);
+                if (parentIndex < parentSiblings.length - 1) {
+                  // Found an ancestor with a next sibling.
+                  exit = nodeIndexMap.get(parentSiblings[parentIndex + 1])!;
+                  break; // Exit found, so stop searching.
+                }
+              }
+              ancestorId = ancestorNode.parent; // Move up to the next ancestor.
+            }
           }
         }
       }
@@ -522,54 +542,83 @@ class SceneGraph {
   }
 }
 
-const sceneGraph = new SceneGraph();
+export function generateRandomBlobTree(
+  numLeaves: number,
+  numChildrenPerNode: number,
+): SceneGraph {
+  const sceneGraph = new SceneGraph();
+  if (numLeaves <= 0) {
+    return sceneGraph;
+  }
 
-// Initialize dummy mat4 for examples
-const identityMat = mat4.identity(mat4.create());
-const translateMat1 = mat4.fromTranslation(mat4.create(), [1, 0, 0]); // Sphere 2
-const translateMat2 = mat4.fromTranslation(mat4.create(), [0, 2, 0]); // Sphere 3
-const translateMat3 = mat4.fromTranslation(mat4.create(), [0, 0, 3]); // Sphere 4
-const translateMat4 = mat4.fromTranslation(mat4.create(), [-1, -1, -1]); // Sphere 5
+  const root = sceneGraph.addOperationNode({
+    name: "Root",
+    op: Operation.Union,
+    smoothing: 0.2,
+  });
 
-// 1. Create a root operation node
-const rootNode = sceneGraph.addOperationNode({
-  name: "Root Union",
-  op: Operation.Union,
-  smoothing: 0.1,
-});
+  let parentCandidates: OperationNode[] = [root];
+  let leavesCreated = 0;
 
-// 2. Add children to the root
-const sphere1 = sceneGraph.addLeafNode(
-  { name: "Sphere 1", transform: identityMat, scale: 1.0 },
-  rootNode.id,
-);
-const group1 = sceneGraph.addOperationNode(
-  { name: "Group 1 Difference", op: Operation.Difference, smoothing: 0.05 },
-  rootNode.id,
-);
+  while (leavesCreated < numLeaves) {
+    if (parentCandidates.length === 0) {
+      // This case occurs when all available operation nodes are full.
+      // We'll create a new operation node and attach it to a random existing operation node.
+      const allOpNodes: OperationNode[] = [];
+      sceneGraph.traverse((node) => {
+        if (node.type === "operation") {
+          allOpNodes.push(node as OperationNode);
+        }
+      });
+      const grandParent =
+        allOpNodes[Math.floor(Math.random() * allOpNodes.length)];
+      const newParent = sceneGraph.addOperationNode(
+        { op: Operation.Union, smoothing: 0.1 },
+        grandParent.id,
+      );
+      parentCandidates.push(newParent);
+    }
 
-// 3. Add children to group1
-const sphere2 = sceneGraph.addLeafNode(
-  { name: "Sphere 2", transform: translateMat1, scale: 0.8 },
-  group1.id,
-);
-const sphere3 = sceneGraph.addLeafNode(
-  { name: "Sphere 3", transform: translateMat2, scale: 0.5 },
-  group1.id,
-);
+    const parent =
+      parentCandidates[Math.floor(Math.random() * parentCandidates.length)];
 
-// 4. Add another group under the root
-const group2 = sceneGraph.addOperationNode(
-  { name: "Group 2 Intersect", op: Operation.Intersect, smoothing: 0.2 },
-  rootNode.id,
-);
-const sphere4 = sceneGraph.addLeafNode(
-  { name: "Sphere 4", transform: translateMat3, scale: 0.7 },
-  group2.id,
-);
-const sphere5 = sceneGraph.addLeafNode(
-  { name: "Sphere 5", transform: translateMat4, scale: 0.9 },
-  group2.id,
-);
+    // Decide whether to add a leaf or another operation node.
+    // We'll add a leaf if we're running out of leaves to create, or just by chance.
+    const shouldAddLeaf =
+      Math.random() < 0.75 ||
+      parentCandidates.length >= numLeaves - leavesCreated;
 
-export { sceneGraph };
+    if (shouldAddLeaf) {
+      const position = vec3.fromValues(
+        (Math.random() - 0.5) * 12,
+        (Math.random() - 0.5) * 12,
+        (Math.random() - 0.5) * 12,
+      );
+      const scale = Math.random() * 1.2 + 0.2;
+      const transform = mat4.fromTranslation(mat4.create(), position);
+      sceneGraph.addLeafNode(
+        { transform, scale, name: `Leaf-${leavesCreated}` },
+        parent.id,
+      );
+      leavesCreated++;
+    } else {
+      const newOp = sceneGraph.addOperationNode(
+        {
+          op: Math.random() > 0.5 ? Operation.Difference : Operation.Intersect,
+          smoothing: Math.random() * 0.25,
+        },
+        parent.id,
+      );
+      parentCandidates.push(newOp);
+    }
+
+    // Remove parents that are full.
+    parentCandidates = parentCandidates.filter(
+      (p) => p.children.length < numChildrenPerNode,
+    );
+  }
+
+  return sceneGraph;
+}
+
+export const sceneGraph = generateRandomBlobTree(100, 5);
