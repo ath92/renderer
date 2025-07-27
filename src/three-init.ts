@@ -102,7 +102,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
 
   transform_controls.addEventListener("change", worldPositionChanged);
 
-  window.addEventListener("click", onClick);
+  canvas.addEventListener("click", onClick);
 
   function animate() {
     requestAnimationFrame(animate);
