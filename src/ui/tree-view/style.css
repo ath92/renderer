@@ -9,6 +9,10 @@
     border-left: 1px solid #ccc;
 }
 
+.tree-node.selected {
+    outline: 1px solid red;
+}
+
 .leaf-node {
     position: relative;
     padding-left: 20px;

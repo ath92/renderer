@@ -402,17 +402,17 @@ class SceneGraph {
     const traversalOrder: SceneNode[] = [];
 
     const dfs = (nodeId: NodeId) => {
-        const node = normalizedNodes.get(nodeId);
-        if (!node) return;
+      const node = normalizedNodes.get(nodeId);
+      if (!node) return;
 
-        if (node.type === "operation") {
-            for (const childId of node.children) {
-                dfs(childId);
-            }
+      nodeIndexMap.set(nodeId, traversalOrder.length);
+      traversalOrder.push(node);
+
+      if (node.type === "operation") {
+        for (const childId of node.children) {
+          dfs(childId);
         }
-
-        nodeIndexMap.set(nodeId, traversalOrder.length);
-        traversalOrder.push(node);
+      }
     };
 
     dfs(normalizedRootId);
@@ -630,7 +630,7 @@ export function generateRandomBlobTree(
     } else {
       const newOp = sceneGraph.addOperationNode(
         {
-          op: Math.random() > 0.5 ? Operation.Difference : Operation.Union,
+          op: Operation.Difference, //Math.random() > 0.5 ? Operation.Difference : Operation.Union,
           smoothing: Math.random() * 0.25,
         },
         parent.id,
@@ -647,4 +647,6 @@ export function generateRandomBlobTree(
   return sceneGraph;
 }
 
-export const sceneGraph = generateRandomBlobTree(10, 5);
+export const sceneGraph = generateRandomBlobTree(5, 5);
+
+console.log(sceneGraph);

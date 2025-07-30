@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { sceneGraph } from "./blob-tree";
 import playerControls from "./player-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { selectedNode } from "./selection";
+import { effect } from "@preact/signals";
 const scene = new THREE.Scene();
 
 const wireframeMaterial = new THREE.MeshBasicMaterial({
@@ -44,6 +46,8 @@ export function syncSpheres() {
   spheres = new_spheres;
 }
 
+var transform_controls: TransformControls;
+
 export function initThreeScene(canvas: HTMLCanvasElement) {
   const camera = new THREE.PerspectiveCamera(
     53.13,
@@ -57,7 +61,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
 
   syncSpheres();
 
-  const transform_controls = new TransformControls(camera);
+  transform_controls = new TransformControls(camera);
   scene.add(transform_controls.getHelper());
   transform_controls.connect(canvas);
 
@@ -74,9 +78,9 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     console.log(first);
 
     if (first) {
-      transform_controls.attach(first.object);
+      selectedNode.value = first.object.name;
     } else {
-      transform_controls.detach();
+      selectedNode.value = null;
     }
   };
 
@@ -117,3 +121,15 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
 
   animate();
 }
+
+effect(() => {
+  const id = selectedNode.value;
+  if (!transform_controls) return;
+  if (id === null) {
+    transform_controls.detach();
+    return;
+  }
+  const obj = scene.getObjectByName(id);
+  if (!obj) return;
+  transform_controls.attach(obj);
+});

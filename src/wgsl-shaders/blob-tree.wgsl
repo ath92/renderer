@@ -137,21 +137,21 @@ fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) ->
         return sdf_result;
     }
 
+    var traversal_stack: array<i32, 64>;
+    var stack_ptr = 0;
+    traversal_stack[stack_ptr] = 0; // Start with root index
+    stack_ptr++;
+
     var value_stack: array<f32, 64>;
     var value_stack_ptr = 0;
 
-    for (var i = 0u; i < arrayLength(&bvh_nodes); i++) {
-        let node = bvh_nodes[i];
+    while (stack_ptr > 0) {
+        stack_ptr--;
+        let node_index = traversal_stack[stack_ptr];
 
-        if (node.type_op_data1.x == 1.0) { // Leaf node
-            let transform = node.model_matrix;
-            let sphere_center = (transform * vec4<f32>(0.0, 0.0, 0.0, 1.0)).xyz;
-            let sphere_radius = node.type_op_data1.y;
-            let dist = sphere_sdf(point, sphere_center, sphere_radius);
-            value_stack[value_stack_ptr] = dist;
-            value_stack_ptr++;
-        } else { // Operation node
-            if (value_stack_ptr < 2) { continue; } // Should not happen in a valid tree
+        if (node_index < 0) { // Negative index indicates a post-order (evaluation) step
+            let node = bvh_nodes[-node_index - 1];
+            if (value_stack_ptr < 2) { continue; }
             let d2 = value_stack[value_stack_ptr - 1];
             let d1 = value_stack[value_stack_ptr - 2];
             value_stack_ptr -= 2;
@@ -168,6 +168,38 @@ fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) ->
             }
             value_stack[value_stack_ptr] = combined_dist;
             value_stack_ptr++;
+            continue;
+        }
+
+        let node = bvh_nodes[node_index];
+
+        if (node.type_op_data1.x == 1.0) { // Leaf node
+            let transform = node.model_matrix;
+            let sphere_center = (transform * vec4<f32>(0.0, 0.0, 0.0, 1.0)).xyz;
+            let sphere_radius = node.type_op_data1.y;
+            let dist = sphere_sdf(point, sphere_center, sphere_radius);
+            value_stack[value_stack_ptr] = dist;
+            value_stack_ptr++;
+        } else { // Operation node
+
+            if (!ray_aabb_intersection(point, ray_dir, node.aabb_min.xyz, node.aabb_max.xyz)) {
+                continue; // Skip this node and its children
+            }
+            let child1_index = i32(node.tree_indices.x);
+            let child2_index = i32(node.tree_indices.y);
+
+            // Push the parent for post-order evaluation (negative index)
+            traversal_stack[stack_ptr] = -(node_index) - 1;
+            stack_ptr++;
+
+            if (child2_index != -1) {
+                traversal_stack[stack_ptr] = child2_index;
+                stack_ptr++;
+            }
+            if (child1_index != -1) {
+                traversal_stack[stack_ptr] = child1_index;
+                stack_ptr++;
+            }
         }
     }
 
