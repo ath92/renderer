@@ -7,7 +7,7 @@ import { effect } from "@preact/signals";
 const scene = new THREE.Scene();
 
 const selectedMaterial = new THREE.MeshBasicMaterial({
-  color: 0x00ff00,
+  color: 0x0099ff,
   wireframe: true,
   opacity: 0.15,
   transparent: true,

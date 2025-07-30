@@ -86,8 +86,8 @@ fn op_smooth_intersect(a: f32, b: f32, k: f32) -> f32 {
     return mix(a, b, h) - k * h * (1.0 - h);
 }
 
-fn calculate_normal_bvh(p: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
-    let h: f32 = 0.001; // replace by an appropriate value
+fn calculate_normal_bvh(p: vec3<f32>, ray_dir: vec3<f32>, current_dist: f32) -> vec3<f32> {
+    let h: f32 = 0.001 / current_dist; // replace by an appropriate value
     let k: vec2<f32> = vec2<f32>(1.0, -1.0);
 
     let term1 = k.xyy * evaluate_scene_sdf_bvh_2(p + k.xyy * h, ray_dir, 0).distance;
@@ -183,6 +183,8 @@ fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) ->
         } else { // Operation node
 
             if (!ray_aabb_intersection(point, ray_dir, node.aabb_min.xyz, node.aabb_max.xyz)) {
+                value_stack[value_stack_ptr] = 99999.;
+                value_stack_ptr++;
                 continue; // Skip this node and its children
             }
             let child1_index = i32(node.tree_indices.x);
@@ -239,7 +241,7 @@ fn raymarch_from_position_bvh_2(start_pos: vec3<f32>, ray_dir: vec3<f32>, config
         if (sdf_result.distance < config.surface_threshold) {
             // Calculate normal using the same candidate list for consistency
             var result = sdf_result;
-            result.normal = calculate_normal_bvh(ray_pos, ray_dir);
+            result.normal = calculate_normal_bvh(ray_pos, ray_dir, distance(ray_pos, start_pos));
             return result;
         }
 

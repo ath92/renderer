@@ -2,7 +2,7 @@ import { mat4, vec3 } from "gl-matrix";
 import { updateTreeBuffer } from "./main";
 
 // Using a type alias for the ID for clarity
-type NodeId = string;
+export type NodeId = string;
 
 export enum Operation {
   Union = 0, // Assign numerical values for shader
@@ -97,12 +97,12 @@ const AABB_UTILITIES = {
 };
 
 class SceneGraph {
-  private nodes: Map<NodeId, SceneNode>;
+  private nodes: { [key: NodeId]: SceneNode };
   public rootId: NodeId | null;
   private nextId: number;
 
   constructor() {
-    this.nodes = new Map();
+    this.nodes = {};
     this.rootId = null;
     this.nextId = 0;
   }
@@ -122,7 +122,7 @@ class SceneGraph {
       aabb: AABB_UTILITIES.create(),
       ...params,
     };
-    this.nodes.set(newNode.id, newNode);
+    this.nodes[newNode.id] = newNode;
 
     if (parentId) {
       this.addChild(parentId, newNode.id);
@@ -149,7 +149,7 @@ class SceneGraph {
       aabb: initialAABB,
       ...params,
     };
-    this.nodes.set(newNode.id, newNode);
+    this.nodes[newNode.id] = newNode;
     this.addChild(parentId, newNode.id);
 
     this.updateNodeAABB(newNode.id);
@@ -157,14 +157,14 @@ class SceneGraph {
   }
   private addChild(parentId: NodeId, childId: NodeId): void {
     /* ... same ... */
-    const parentNode = this.nodes.get(parentId);
-    const childNode = this.nodes.get(childId);
+    const parentNode = this.nodes[parentId];
+    const childNode = this.nodes[childId];
 
     if (!parentNode) {
       console.warn(
         `Parent node with ID ${parentId} not found. Child ${childId} not added.`,
       );
-      this.nodes.delete(childId);
+      delete this.nodes[childId];
       return;
     }
     if (!childNode) {
@@ -173,7 +173,7 @@ class SceneGraph {
     }
     if (parentNode.type === "leaf") {
       console.error(`Cannot add child to a leaf node (ID: ${parentId}).`);
-      this.nodes.delete(childId);
+      delete this.nodes[childId];
       return;
     }
 
@@ -184,7 +184,7 @@ class SceneGraph {
   }
   removeNode(nodeId: NodeId): void {
     /* ... same ... */
-    const nodeToRemove = this.nodes.get(nodeId);
+    const nodeToRemove = this.nodes[nodeId];
     if (!nodeToRemove) {
       console.warn(`Node with ID ${nodeId} not found.`);
       return;
@@ -197,13 +197,13 @@ class SceneGraph {
     }
 
     if (parentId) {
-      const parentNode = this.nodes.get(parentId);
+      const parentNode = this.nodes[parentId];
       if (parentNode && parentNode.type === "operation") {
         parentNode.children = parentNode.children.filter((id) => id !== nodeId);
       }
     }
 
-    this.nodes.delete(nodeId);
+    delete this.nodes[nodeId];
 
     if (this.rootId === nodeId) {
       this.rootId = null;
@@ -216,7 +216,7 @@ class SceneGraph {
   }
   private updateNodeAABB(nodeId: NodeId): void {
     /* ... same ... */
-    const node = this.nodes.get(nodeId);
+    const node = this.nodes[nodeId];
     if (!node) {
       return;
     }
@@ -251,7 +251,7 @@ class SceneGraph {
     newProps: Partial<LeafParams>,
   ): void {
     /* ... same ... */
-    const leafNode = this.nodes.get(leafId);
+    const leafNode = this.nodes[leafId];
     if (!leafNode || leafNode.type !== "leaf") {
       console.warn(`Node ${leafId} not found or not a leaf node.`);
       return;
@@ -261,10 +261,10 @@ class SceneGraph {
     this.updateNodeAABB(leafId);
   }
   getNode(id: NodeId): SceneNode | undefined {
-    return this.nodes.get(id);
+    return this.nodes[id];
   }
   getRoot(): SceneNode | undefined {
-    return this.rootId ? this.nodes.get(this.rootId) : undefined;
+    return this.rootId ? this.nodes[this.rootId] : undefined;
   }
   traverse(
     callback: (node: SceneNode, depth: number) => void,
@@ -272,9 +272,7 @@ class SceneGraph {
     currentDepth: number = 0,
   ): void {
     /* ... same ... */
-    const startNode = startNodeId
-      ? this.nodes.get(startNodeId)
-      : this.getRoot();
+    const startNode = startNodeId ? this.nodes[startNodeId] : this.getRoot();
     if (!startNode) return;
 
     callback(startNode, currentDepth);
@@ -302,7 +300,7 @@ class SceneGraph {
       originalNodeId: NodeId,
       newParentId?: NodeId,
     ): NodeId => {
-      const originalNode = this.nodes.get(originalNodeId)!;
+      const originalNode = this.nodes[originalNodeId]!;
       const newNode: SceneNode = structuredClone(originalNode);
       newNode.id = generateNormalizedId();
       if (newParentId) {
@@ -365,6 +363,16 @@ class SceneGraph {
       };
       buildPostOrder(rootId);
 
+      function getMaxSmoothing(nodeId: NodeId) {
+        const node = normalizedNodes.get(nodeId);
+        if (!node || node.type === "leaf") return 0;
+        let max = node?.smoothing;
+        for (let child of node.children) {
+          max = Math.max(getMaxSmoothing(child), max);
+        }
+        return max;
+      }
+
       for (const nodeId of postOrder) {
         const node = normalizedNodes.get(nodeId)!;
         let newAABB: AABB;
@@ -379,7 +387,7 @@ class SceneGraph {
             const child = normalizedNodes.get(childId)!;
             AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
           }
-          AABB_UTILITIES.expandByScalar(newAABB, node.smoothing * 4);
+          AABB_UTILITIES.expandByScalar(newAABB, getMaxSmoothing(rootId) * 4);
         }
         node.aabb = newAABB;
       }
@@ -599,11 +607,11 @@ export function generateRandomBlobTree(
     // console.log(parent_is_empty, parent, parent_bbox_size, parent_bbox_center);
     if (shouldAddLeaf) {
       const position = vec3.fromValues(
-        (Math.random() - 0.5) * 1.6 * parent_bbox_size[0] +
+        (Math.random() - 0.5) * 1.2 * parent_bbox_size[0] +
           parent_bbox_center[0],
-        (Math.random() - 0.5) * 1.6 * parent_bbox_size[1] +
+        (Math.random() - 0.5) * 1.2 * parent_bbox_size[1] +
           parent_bbox_center[1],
-        (Math.random() - 0.5) * 1.6 * parent_bbox_size[2] +
+        (Math.random() - 0.5) * 1.2 * parent_bbox_size[2] +
           parent_bbox_center[2],
       );
       console.log(
@@ -647,6 +655,6 @@ export function generateRandomBlobTree(
   return sceneGraph;
 }
 
-export const sceneGraph = generateRandomBlobTree(5, 5);
+export const sceneGraph = generateRandomBlobTree(15, 5);
 
 console.log(sceneGraph);
