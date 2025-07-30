@@ -21,7 +21,7 @@ struct Node {
     type_op_data1: vec4<f32>, // x: type (0=op, 1=leaf), y: op/scale, z: smoothing/padding, w: padding
     aabb_min: vec4<f32>,      // x,y,z, w: padding
     aabb_max: vec4<f32>,      // x,y,z, w: padding
-    tree_indices: vec4<f32>,  // x: entry, y: exit, z: flattenedIndex, w: padding
+    tree_indices: vec4<f32>,  // x: child1, y: child2, z: parent, w: flattenedIndex
     model_matrix: mat4x4<f32>, // 16 floats
 };
 
@@ -58,6 +58,34 @@ fn quadratic_smin( a: f32, b: f32, k: f32 ) -> f32
     return min(a,b) - h*h*k4*(1.0/4.0);
 }
 
+// Basic SDF operations
+fn op_union(a: f32, b: f32) -> f32 {
+    return min(a, b);
+}
+
+fn op_subtract(a: f32, b: f32) -> f32 {
+    return max(a, -b);
+}
+
+fn op_intersect(a: f32, b: f32) -> f32 {
+    return max(a, b);
+}
+
+// Smooth SDF operations
+fn op_smooth_union(a: f32, b: f32, k: f32) -> f32 {
+    return quadratic_smin(a, b, k);
+}
+
+fn op_smooth_subtract(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 - 0.5 * (a + b) / k, 0.0, 1.0);
+    return mix(a, -b, h) + k * h * (1.0 - h);
+}
+
+fn op_smooth_intersect(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 - 0.5 * (a - b) / k, 0.0, 1.0);
+    return mix(a, b, h) - k * h * (1.0 - h);
+}
+
 fn calculate_normal_bvh(p: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
     let h: f32 = 0.001; // replace by an appropriate value
     let k: vec2<f32> = vec2<f32>(1.0, -1.0);
@@ -70,23 +98,22 @@ fn calculate_normal_bvh(p: vec3<f32>, ray_dir: vec3<f32>) -> vec3<f32> {
     return normalize(term1 + term2 + term3 + term4);
 }
 
-// Combine a sphere into the existing scene result with smooth blending
-fn combine_sphere_into_scene_result(
-    current_result: ptr<function, SceneSdfResult>,
-    point: vec3<f32>,
-    sphere_center: vec3<f32>,
-    sphere_radius: f32,
-    smoothing_factor: f32,
-    is_first: bool
-) {
-    let sphere_distance = sphere_sdf(point, sphere_center, sphere_radius);
-
-    if (is_first) {
-        // First sphere - just use its values
-        (*current_result).distance = sphere_distance;
-    } else {
-        // Combine with existing result using smooth minimum
-        (*current_result).distance = quadratic_smin((*current_result).distance, sphere_distance, smoothing_factor);
+fn combine_sphere_into_result(sdf_result: ptr<function, SceneSdfResult>, sphere_center: vec3<f32>, sphere_radius: f32, op_type: i32, smoothing_factor: f32) {
+    let d1 = (*sdf_result).distance;
+    let d2 = sphere_sdf((*sdf_result).position, sphere_center, sphere_radius);
+    switch (op_type) {
+        case 0: { // Union
+            (*sdf_result).distance = op_smooth_union(d1, d2, smoothing_factor);
+        }
+        case 1: { // Intersect
+            (*sdf_result).distance = op_smooth_intersect(d1, d2, smoothing_factor);
+        }
+        case 2: { // Difference
+            (*sdf_result).distance = op_smooth_subtract(d1, d2, smoothing_factor);
+        }
+        default: { // Fallback
+            (*sdf_result).distance = op_smooth_union(d1, d2, smoothing_factor);
+        }
     }
 }
 
@@ -106,50 +133,46 @@ fn ray_aabb_intersection(ray_origin: vec3<f32>, ray_dir: vec3<f32>, aabb_min: ve
 
 fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) -> SceneSdfResult {
     var sdf_result = init_scene_sdf_result(point, steps);
-    let smoothing_factor = 0.1; // Adjust for more/less blending
+    if (arrayLength(&bvh_nodes) == 0u) {
+        return sdf_result;
+    }
 
-    var index = 0;
-    var processed_any = false;
+    var value_stack: array<f32, 64>;
+    var value_stack_ptr = 0;
 
-    var aabb_min_dist = sdf_result.distance;
+    for (var i = 0u; i < arrayLength(&bvh_nodes); i++) {
+        let node = bvh_nodes[i];
 
-    // Iterate while the node index is valid (-1 is used for invalid indices)
-    while (index >= 0) {
-        let node = bvh_nodes[index];
-        let node_type = node.type_op_data1.x;
-
-        if (node_type == 1.) { // 1. == leaf node
+        if (node.type_op_data1.x == 1.0) { // Leaf node
             let transform = node.model_matrix;
-
-            let sphere_center = transform * vec4(0.,0.,0., 1.);
+            let sphere_center = (transform * vec4<f32>(0.0, 0.0, 0.0, 1.0)).xyz;
             let sphere_radius = node.type_op_data1.y;
+            let dist = sphere_sdf(point, sphere_center, sphere_radius);
+            value_stack[value_stack_ptr] = dist;
+            value_stack_ptr++;
+        } else { // Operation node
+            if (value_stack_ptr < 2) { continue; } // Should not happen in a valid tree
+            let d2 = value_stack[value_stack_ptr - 1];
+            let d1 = value_stack[value_stack_ptr - 2];
+            value_stack_ptr -= 2;
 
-            combine_sphere_into_scene_result(
-                &sdf_result,
-                point,
-                sphere_center.xyz,
-                sphere_radius,
-                smoothing_factor,
-                !processed_any
-            );
+            let op_type = i32(node.type_op_data1.y);
+            let smoothing = node.type_op_data1.z;
+            var combined_dist: f32;
 
-            processed_any = true;
-
-            // Exit the current node
-            index = i32(node.tree_indices.y);
-        } else {
-            if (ray_aabb_intersection(point, ray_dir, node.aabb_min.xyz, node.aabb_max.xyz)) {
-                // If AABB test passes, proceed to entry_index (go down the tree branch)
-                index = i32(node.tree_indices.x);
-            } else {
-                // If AABB test fails, proceed to exit_index (skip this subtree, proceed to next sibling)
-                index = i32(node.tree_indices.y);
+            switch (op_type) {
+                case 0: { combined_dist = op_smooth_union(d1, d2, smoothing); }
+                case 1: { combined_dist = op_smooth_intersect(d1, d2, smoothing); }
+                case 2: { combined_dist = op_smooth_subtract(d1, d2, smoothing); }
+                default: { combined_dist = op_smooth_union(d1, d2, smoothing); }
             }
+            value_stack[value_stack_ptr] = combined_dist;
+            value_stack_ptr++;
         }
     }
 
-    if (!processed_any) {
-        sdf_result.distance = aabb_min_dist;
+    if (value_stack_ptr > 0) {
+        sdf_result.distance = value_stack[0];
     }
 
     return sdf_result;

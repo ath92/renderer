@@ -1,4 +1,4 @@
-import { render, h } from 'preact';
+import { render } from 'preact';
 import { TreeView } from './tree-view/components';
 
 export function App() {

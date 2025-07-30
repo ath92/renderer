@@ -78,7 +78,7 @@ class PlayerControls {
   enabled = true;
 
   constructor(
-    acceleration = 0.0005,
+    acceleration = 0.005,
     friction = 0.12,
     mouseSensitivity = 0.15,
     touchSensitivity = 0.012,

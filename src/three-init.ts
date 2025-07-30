@@ -7,7 +7,7 @@ const scene = new THREE.Scene();
 const wireframeMaterial = new THREE.MeshBasicMaterial({
   color: 0x00ff00,
   wireframe: true,
-  opacity: 0.01,
+  opacity: 0.05,
   transparent: true,
 });
 
@@ -84,7 +84,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     playerControls.enabled = !value;
   });
 
-  function worldPositionChanged(e: THREE.Event) {
+  function worldPositionChanged() {
     const obj = transform_controls.object;
     if (!obj) return;
 

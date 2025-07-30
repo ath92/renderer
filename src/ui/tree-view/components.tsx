@@ -1,29 +1,30 @@
-import { h } from 'preact';
 import { blobTree, collapsedNodes, toggleNode } from './state';
 import './style.css';
+import { SceneNode, Operation } from '../../blob-tree';
 
-const OperationMap = {
-    0: 'Union',
-    1: 'Intersect',
-    2: 'Difference',
+const OperationMap: Record<Operation, string> = {
+    [Operation.Union]: 'Union',
+    [Operation.Intersect]: 'Intersect',
+    [Operation.Difference]: 'Difference',
 }
 
-function LeafNode({ node }) {
-    return <div class="tree-node leaf-node">{node.id}</div>;
+function LeafNode({ node }: { node: SceneNode }) {
+    return <div class="tree-node leaf-node">{node.name}</div>;
 }
 
-function OperationNode({ node }) {
+function OperationNode({ node }: { node: SceneNode }) {
+    if (node.type !== 'operation') return null;
     const isCollapsed = collapsedNodes.value.has(node.id);
 
     return (
         <div class="tree-node operation-node">
             <div class="node-details" onClick={() => toggleNode(node.id)}>
-                <span>{node.id}</span>
+                <span>{node.name}</span>
                 <span class="operation-type">{OperationMap[node.op]}</span>
             </div>
             {!isCollapsed && (
                 <div class="children">
-                    {node.children.map((childId) => {
+                    {node.children.map((childId: string) => {
                         const childNode = blobTree.value.getNode(childId);
                         return childNode ? <TreeNode node={childNode} /> : null;
                     })}
@@ -33,7 +34,7 @@ function OperationNode({ node }) {
     );
 }
 
-function TreeNode({ node }) {
+function TreeNode({ node }: { node: SceneNode }) {
     if (node.type === 'leaf') {
         return <LeafNode node={node} />;
     }

@@ -4,7 +4,7 @@ import { updateTreeBuffer } from "./main";
 // Using a type alias for the ID for clarity
 type NodeId = string;
 
-enum Operation {
+export enum Operation {
   Union = 0, // Assign numerical values for shader
   Intersect = 1,
   Difference = 2,
@@ -54,13 +54,13 @@ interface LeafNode extends BaseNode, LeafParams {
 }
 
 // Discriminated union for all possible node types
-type SceneNode = OperationNode | LeafNode;
+export type SceneNode = OperationNode | LeafNode;
 
 // --- Flattened Node Definition ---
-type FlattenedNode = SceneNode & {
-  entry: number; // Index of the first child in the flattened array (-1 if no children)
-  exit: number; // Index of the next sibling in the flattened array (-1 if no next sibling)
-  // We might also add the original index in the flattened array itself for convenience
+type FlattenedNode = (OperationNode | LeafNode) & {
+  child1: number;
+  child2: number;
+  parentIndex: number;
   flattenedIndex: number;
 };
 
@@ -133,6 +133,7 @@ class SceneGraph {
     this.updateNodeAABB(newNode.id);
     return newNode;
   }
+
   addLeafNode(
     params: Omit<LeafParams, "aabb"> & { name?: string },
     parentId: NodeId,
@@ -285,93 +286,167 @@ class SceneGraph {
     }
   }
 
-  /**
-   * Constructs a flattened version of the tree with 'entry', 'exit', and 'flattenedIndex' indices.
-   * The 'entry' index points to the first child's position in the flattened array.
-   * The 'exit' index points to the next sibling's position in the flattened array.
-   * If no child/sibling, it's -1.
-   */
-  flattenTree(): FlattenedNode[] {
-    const flattenedNodes: FlattenedNode[] = [];
+  private getNormalizedTree(): {
+    nodes: Map<NodeId, SceneNode>;
+    rootId: NodeId | null;
+  } {
     if (!this.rootId) {
-      return flattenedNodes;
+      return { nodes: new Map(), rootId: null };
     }
 
-    const nodeIndexMap = new Map<NodeId, number>();
-    const traversalOrder: { nodeId: NodeId; originalNode: SceneNode }[] = [];
+    const normalizedNodes = new Map<NodeId, SceneNode>();
+    let nextId = 0;
+    const generateNormalizedId = () => `norm-${nextId++}`;
 
-    let currentIndex = 0;
-    const dfs = (nodeId: NodeId) => {
-      const node = this.nodes.get(nodeId);
-      if (!node) return;
+    const buildNormalizedTree = (
+      originalNodeId: NodeId,
+      newParentId?: NodeId,
+    ): NodeId => {
+      const originalNode = this.nodes.get(originalNodeId)!;
+      const newNode: SceneNode = structuredClone(originalNode);
+      newNode.id = generateNormalizedId();
+      if (newParentId) {
+        newNode.parent = newParentId;
+      }
+      normalizedNodes.set(newNode.id, newNode);
 
-      nodeIndexMap.set(nodeId, currentIndex++);
-      traversalOrder.push({ nodeId, originalNode: node });
+      if (newNode.type === "operation" && originalNode.type === "operation") {
+        newNode.children = originalNode.children.map((childId) =>
+          buildNormalizedTree(childId, newNode.id),
+        );
 
-      if (node.type === "operation") {
-        for (const childId of node.children) {
-          dfs(childId);
+        if (newNode.children.length > 2) {
+          let currentChildren = [...newNode.children];
+          while (currentChildren.length > 2) {
+            const newChildrenOfThisLevel = [];
+            for (let i = 0; i < currentChildren.length; i += 2) {
+              if (i + 1 < currentChildren.length) {
+                const intermediateOp: OperationNode = {
+                  id: generateNormalizedId(),
+                  type: "operation",
+                  op: newNode.op,
+                  smoothing: newNode.smoothing,
+                  name: `${newNode.name} (normalized)`,
+                  children: [currentChildren[i], currentChildren[i + 1]],
+                  parent: newNode.id,
+                  aabb: AABB_UTILITIES.create(),
+                };
+                normalizedNodes.set(intermediateOp.id, intermediateOp);
+                const child1 = normalizedNodes.get(currentChildren[i])!;
+                child1.parent = intermediateOp.id;
+                const child2 = normalizedNodes.get(currentChildren[i + 1])!;
+                child2.parent = intermediateOp.id;
+                newChildrenOfThisLevel.push(intermediateOp.id);
+              } else {
+                newChildrenOfThisLevel.push(currentChildren[i]);
+              }
+            }
+            currentChildren = newChildrenOfThisLevel;
+          }
+          newNode.children = currentChildren;
         }
+      }
+      return newNode.id;
+    };
+
+    const newRootId = buildNormalizedTree(this.rootId);
+
+    const recalculateAABBs = (rootId: NodeId) => {
+      const postOrder: NodeId[] = [];
+      const buildPostOrder = (nodeId: NodeId) => {
+        const node = normalizedNodes.get(nodeId);
+        if (!node) return;
+        if (node.type === "operation") {
+          for (const childId of node.children) {
+            buildPostOrder(childId);
+          }
+        }
+        postOrder.push(nodeId);
+      };
+      buildPostOrder(rootId);
+
+      for (const nodeId of postOrder) {
+        const node = normalizedNodes.get(nodeId)!;
+        let newAABB: AABB;
+        if (node.type === "leaf") {
+          newAABB = AABB_UTILITIES.calculateSphereAABB(
+            node.transform,
+            node.scale,
+          );
+        } else {
+          newAABB = AABB_UTILITIES.create();
+          for (const childId of node.children) {
+            const child = normalizedNodes.get(childId)!;
+            AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
+          }
+          AABB_UTILITIES.expandByScalar(newAABB, node.smoothing * 4);
+        }
+        node.aabb = newAABB;
       }
     };
 
-    dfs(this.rootId);
+    recalculateAABBs(newRootId);
 
-    for (const { nodeId, originalNode } of traversalOrder) {
-      let entry = -1;
-      let exit = -1;
-      const flattenedIndex = nodeIndexMap.get(nodeId)!; // Store its own flattened index
+    return { nodes: normalizedNodes, rootId: newRootId };
+  }
 
-      if (
-        originalNode.type === "operation" &&
-        originalNode.children.length > 0
-      ) {
-        entry = nodeIndexMap.get(originalNode.children[0])!;
-      }
+  flattenTree(): FlattenedNode[] {
+    const { nodes: normalizedNodes, rootId: normalizedRootId } =
+      this.getNormalizedTree();
 
-      if (originalNode.parent) {
-        const parentNode = this.nodes.get(originalNode.parent);
-        if (parentNode && parentNode.type === "operation") {
-          const siblings = parentNode.children;
-          const selfIndexInSiblings = siblings.indexOf(nodeId);
+    if (!normalizedRootId) {
+      return [];
+    }
 
-          if (selfIndexInSiblings < siblings.length - 1) {
-            // If it's not the last child, the exit is the next sibling.
-            exit = nodeIndexMap.get(siblings[selfIndexInSiblings + 1])!;
-          } else {
-            // If it is the last child, we need to find the exit of the parent.
-            // This means finding the next sibling of an ancestor.
-            let ancestorId = originalNode.parent;
-            while (ancestorId) {
-              const ancestorNode = this.nodes.get(ancestorId);
-              if (!ancestorNode || !ancestorNode.parent) {
-                // Reached the root or an orphaned node, no further exit.
-                break;
-              }
+    const nodeIndexMap = new Map<NodeId, number>();
+    const traversalOrder: SceneNode[] = [];
 
-              const grandparentNode = this.nodes.get(ancestorNode.parent);
-              if (grandparentNode && grandparentNode.type === "operation") {
-                const parentSiblings = grandparentNode.children;
-                const parentIndex = parentSiblings.indexOf(ancestorId);
-                if (parentIndex < parentSiblings.length - 1) {
-                  // Found an ancestor with a next sibling.
-                  exit = nodeIndexMap.get(parentSiblings[parentIndex + 1])!;
-                  break; // Exit found, so stop searching.
-                }
-              }
-              ancestorId = ancestorNode.parent; // Move up to the next ancestor.
+    const dfs = (nodeId: NodeId) => {
+        const node = normalizedNodes.get(nodeId);
+        if (!node) return;
+
+        if (node.type === "operation") {
+            for (const childId of node.children) {
+                dfs(childId);
             }
+        }
+
+        nodeIndexMap.set(nodeId, traversalOrder.length);
+        traversalOrder.push(node);
+    };
+
+    dfs(normalizedRootId);
+
+    const flattenedNodes: FlattenedNode[] = traversalOrder.map(
+      (node, index) => {
+        const flattenedIndex = index;
+
+        let parentIndex = -1;
+        if (node.parent) {
+          const pIndex = nodeIndexMap.get(node.parent);
+          if (pIndex !== undefined) {
+            parentIndex = pIndex;
           }
         }
-      }
 
-      flattenedNodes.push({
-        ...originalNode,
-        entry,
-        exit,
-        flattenedIndex, // Add the flattened index here
-      });
-    }
+        let child1 = -1;
+        let child2 = -1;
+        if (node.type === "operation" && node.children.length > 0) {
+          child1 = nodeIndexMap.get(node.children[0]) ?? -1;
+          if (node.children.length > 1) {
+            child2 = nodeIndexMap.get(node.children[1]) ?? -1;
+          }
+        }
+
+        return {
+          ...node,
+          child1,
+          child2,
+          parentIndex,
+          flattenedIndex,
+        };
+      },
+    );
 
     return flattenedNodes;
   }
@@ -384,88 +459,6 @@ class SceneGraph {
    * @returns A Float32Array representing the node's data for the shader.
    */
   public static serializeFlattenedNode(node: FlattenedNode): Float32Array {
-    // We'll use 16 floats (64 bytes) per node to ensure mat4 alignment
-    // and overall consistent stride for an array of structs.
-    const nodeSizeInFloats = 16;
-    const data = new Float32Array(nodeSizeInFloats);
-    let offset = 0; // Current offset in floats
-
-    // 1. type_op_id_padding: vec4<f32> (4 floats) - Offset 0
-    // x: type (0=op, 1=leaf)
-    // y: operation (Union=0, Intersect=1, Difference=2) OR scale (for leaf)
-    // z: smoothing (for op) OR padding (for leaf)
-    // w: padding (always)
-    data[offset++] = node.type === "operation" ? 0 : 1;
-    if (node.type === "operation") {
-      data[offset++] = node.op;
-      data[offset++] = node.smoothing;
-      data[offset++] = 0; // padding
-    } else {
-      // type === "leaf"
-      data[offset++] = node.scale;
-      data[offset++] = 0; // padding
-      data[offset++] = 0; // padding
-    }
-
-    // 2. aabb_min: vec4<f32> (4 floats) - Offset 4 (16 bytes)
-    data[offset++] = node.aabb.min[0];
-    data[offset++] = node.aabb.min[1];
-    data[offset++] = node.aabb.min[2];
-    data[offset++] = 0; // padding for vec4 alignment
-
-    // 3. aabb_max: vec4<f32> (4 floats) - Offset 8 (32 bytes)
-    data[offset++] = node.aabb.max[0];
-    data[offset++] = node.aabb.max[1];
-    data[offset++] = node.aabb.max[2];
-    data[offset++] = 0; // padding for vec4 alignment
-
-    // 4. entry_exit_padding: vec4<f32> (4 floats) - Offset 12 (48 bytes)
-    data[offset++] = node.entry;
-    data[offset++] = node.exit;
-    data[offset++] = 0; // padding
-    data[offset++] = 0; // padding
-
-    // 5. transform_mat4: mat4x4<f32> (16 floats).
-    // Note: GL-Matrix stores in column-major order, but we often think row-major.
-    // When copying to a flat array, it doesn't matter as much, as long as shader matches.
-    // If you need to treat it as row-major in the shader, copy column by column for GL-Matrix.
-    // Here, we'll assume a standard flattened matrix for the shader.
-    // For mat4x4, it occupies 4 * vec4, so it needs to start on a 16-byte boundary.
-    // Our previous vec4 makes this naturally aligned.
-    // Current offset is 16 (64 bytes).
-    // The previous design was 4 vec4s, ending at offset 15, so 16 is next
-    // No, current offset is 12. So it will be at index 12.
-
-    // A mat4x4<f32> is 16 floats, so it will occupy indices 12-27.
-    // Oh, my WGSL struct example above was 4 vec4s (16 floats) for the transform.
-    // My previous offsets are correct up to 'entry_exit_padding', which ends at index 15.
-    // So the transform starts at index 16. This is perfect for mat4x4.
-
-    // Let's re-evaluate the total size and alignment.
-    // type_op_id_padding: vec4<f32> (0-3) - Size 16 bytes
-    // aabb_min: vec4<f32> (4-7) - Size 16 bytes
-    // aabb_max: vec4<f32> (8-11) - Size 16 bytes
-    // entry_exit_padding: vec4<f32> (12-15) - Size 16 bytes
-    // Total so far: 16 floats = 64 bytes.
-
-    // For the mat4, we need 16 floats.
-    // If the mat4 comes AFTER these 4 vec4s, it naturally aligns.
-    // So total size should be (4+4+4+4+16) = 32 floats.
-
-    // Let's redefine the WGSL struct and then the serialization.
-    // This will make it more robust.
-
-    // --- REVISED WGSL Struct Plan ---
-    // struct Node {
-    //     type_op_data1: vec4<f32>, // x: type (0=op, 1=leaf), y: op/scale, z: smoothing/padding, w: padding
-    //     aabb_min: vec4<f32>,      // x,y,z, w: padding
-    //     aabb_max: vec4<f32>,      // x,y,z, w: padding
-    //     tree_indices: vec4<f32>,  // x: entry, y: exit, z: flattenedIndex, w: padding
-    //     model_matrix: mat4x4<f32>, // 16 floats
-    // };
-    // Total: 4 * 4 + 16 = 32 floats * 4 bytes/float = 128 bytes.
-    // Each field is vec4 aligned, and mat4 is also vec4 aligned. This is good.
-
     const nodeSizeInFloats_Revised = 32;
     const dataRevised = new Float32Array(nodeSizeInFloats_Revised);
     let currentOffset = 0;
@@ -496,21 +489,18 @@ class SceneGraph {
     dataRevised[currentOffset++] = 0; // Padding
 
     // 4. tree_indices: vec4<f32> (4 floats) - Offset 12 (48 bytes)
-    dataRevised[currentOffset++] = node.entry;
-    dataRevised[currentOffset++] = node.exit;
-    dataRevised[currentOffset++] = node.flattenedIndex; // Added for convenience in shader
-    dataRevised[currentOffset++] = 0; // Padding
+    // REPURPOSED: x: child1, y: child2, z: parent, w: flattenedIndex
+    dataRevised[currentOffset++] = node.child1;
+    dataRevised[currentOffset++] = node.child2;
+    dataRevised[currentOffset++] = node.parentIndex;
+    dataRevised[currentOffset++] = node.flattenedIndex;
 
     // 5. model_matrix: mat4x4<f32> (16 floats) - Offset 16 (64 bytes)
-    // If it's an operation node, its transform is implicitly identity for CSG,
-    // or you could add a local transform to operation nodes. For now,
-    // we'll default to identity if it's an operation node, or use the leaf's transform.
     const transformMatrix =
       node.type === "leaf" ? node.transform : mat4.identity(mat4.create());
     dataRevised.set(transformMatrix, currentOffset);
     currentOffset += 16; // Advance offset by 16 floats for the mat4
 
-    // Final check for total size
     if (currentOffset !== nodeSizeInFloats_Revised) {
       console.error(
         `Serialization error: Expected ${nodeSizeInFloats_Revised} floats, got ${currentOffset}`,
@@ -640,7 +630,7 @@ export function generateRandomBlobTree(
     } else {
       const newOp = sceneGraph.addOperationNode(
         {
-          op: Math.random() > 0.5 ? Operation.Difference : Operation.Intersect,
+          op: Math.random() > 0.5 ? Operation.Difference : Operation.Union,
           smoothing: Math.random() * 0.25,
         },
         parent.id,
@@ -657,4 +647,4 @@ export function generateRandomBlobTree(
   return sceneGraph;
 }
 
-export const sceneGraph = generateRandomBlobTree(50, 5);
+export const sceneGraph = generateRandomBlobTree(10, 5);
