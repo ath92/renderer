@@ -6,10 +6,17 @@ import { selectedNode } from "./selection";
 import { effect } from "@preact/signals";
 const scene = new THREE.Scene();
 
-const wireframeMaterial = new THREE.MeshBasicMaterial({
+const selectedMaterial = new THREE.MeshBasicMaterial({
   color: 0x00ff00,
   wireframe: true,
-  opacity: 0.05,
+  opacity: 0.15,
+  transparent: true,
+});
+
+const defaultMaterial = new THREE.MeshBasicMaterial({
+  color: 0x00ff00,
+  wireframe: true,
+  opacity: 0.0,
   transparent: true,
 });
 
@@ -25,7 +32,7 @@ export function syncSpheres() {
         sphere = m as THREE.Mesh;
       } else {
         const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
-        sphere = new THREE.Mesh(geometry, wireframeMaterial);
+        sphere = new THREE.Mesh(geometry, defaultMaterial);
         sphere.name = node.id;
         scene.add(sphere);
       }
@@ -125,11 +132,18 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
 effect(() => {
   const id = selectedNode.value;
   if (!transform_controls) return;
+
+  const current = transform_controls.object as THREE.Mesh;
+  if (current) current.material = defaultMaterial;
+
   if (id === null) {
     transform_controls.detach();
     return;
   }
-  const obj = scene.getObjectByName(id);
+
+  const obj = scene.getObjectByName(id) as THREE.Mesh;
   if (!obj) return;
+
   transform_controls.attach(obj);
+  obj.material = selectedMaterial;
 });
