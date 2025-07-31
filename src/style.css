@@ -28,7 +28,7 @@ canvas {
     top: 10px;
     left: 10px;
     width: 300px;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(60, 60, 60, 0.5);
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(10px);
     border-radius: 5px;
@@ -36,4 +36,5 @@ canvas {
     overflow-y: auto;
     font-family: sans-serif;
     font-size: 12px;
+    color: white;
 }

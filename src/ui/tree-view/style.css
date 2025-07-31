@@ -1,6 +1,12 @@
+h2 {
+    font-size: 12px;
+}
+
 #tree-view {
     color: white;
     padding: 10px;
+    max-height: 50%;
+    overflow: auto;
 }
 
 .tree-node {
@@ -57,4 +63,11 @@
 .operation-type {
     font-style: italic;
     color: #aaa;
+}
+
+.settings-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 4px 16px;
 }

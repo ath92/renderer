@@ -1,4 +1,5 @@
 import { vec3, mat4, quat, mat3 } from "gl-matrix";
+import { hasChanges } from "./has-changes";
 
 const forward = vec3.fromValues(0, 0, 1);
 const backward = vec3.fromValues(0, 0, -1);
@@ -74,7 +75,6 @@ class PlayerControls {
   sprintMode: boolean = false;
   isTouching: boolean = false;
   hasMovedSinceMousedown = false;
-  hasChanges = true;
   enabled = true;
 
   constructor(
@@ -116,13 +116,13 @@ class PlayerControls {
       this.hasMovedSinceMousedown = true;
       this.mouseX += e.movementX * this.mouseSensitivity;
       this.mouseY += e.movementY * this.mouseSensitivity;
-      this.hasChanges = true;
+      hasChanges.value = true;
     });
 
     document.addEventListener("touchstart", (e) => {
       if (!this.enabled) return;
       this.directionKeys.forward = true;
-      this.hasChanges = true;
+      hasChanges.value = true;
       this.isTouching = true;
       const { x, y } = getTouchEventCoordinates(e);
       this.touchX = x;
@@ -136,7 +136,7 @@ class PlayerControls {
       const { x, y } = getTouchEventCoordinates(e);
       this.touchX = x;
       this.touchY = y;
-      this.hasChanges = true;
+      hasChanges.value = true;
     });
 
     const onTouchOver = () => {
@@ -148,7 +148,7 @@ class PlayerControls {
       if (!this.enabled) return;
       this.scrollY += e.deltaY / 5000;
       this.scrollX += e.deltaX / 5000;
-      this.hasChanges = true;
+      hasChanges.value = true;
     });
 
     document.addEventListener("touchend", onTouchOver);
@@ -217,7 +217,8 @@ class PlayerControls {
     if (vec3.length(this.speed) < minSpeed) {
       vec3.set(this.speed, 0, 0, 0);
     }
-    this.hasChanges = this.hasChanges || vec3.len(this.speed) > 0;
+
+    hasChanges.value = hasChanges.value || vec3.len(this.speed) > 0;
     vec3.add(this.speed, this.speed, diff);
     vec3.add(this.position, this.position, this.speed);
 
@@ -225,7 +226,7 @@ class PlayerControls {
   }
 
   get state() {
-    const hasChanges = this.hasChanges;
+    const has_changes = hasChanges.value;
     // this.hasChanges = false;
     //
     const cameraDirection = mat4.fromQuat(mat4.create(), this.direction);
@@ -235,7 +236,7 @@ class PlayerControls {
       this.position,
     );
     return {
-      hasChanges,
+      hasChanges: has_changes,
       scrollX: this.scrollX,
       scrollY: this.scrollY,
       cameraPosition: [...this.position],

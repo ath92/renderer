@@ -1,5 +1,7 @@
 import { mat4, vec3 } from "gl-matrix";
 import { updateTreeBuffer } from "./main";
+import { hasChanges } from "./has-changes";
+import { syncSpheres } from "./three-init";
 
 // Using a type alias for the ID for clarity
 export type NodeId = string;
@@ -54,7 +56,7 @@ interface LeafNode extends BaseNode, LeafParams {
 }
 
 // Discriminated union for all possible node types
-export type SceneNode = OperationNode | LeafNode;
+export type CSGNode = OperationNode | LeafNode;
 
 // --- Flattened Node Definition ---
 type FlattenedNode = (OperationNode | LeafNode) & {
@@ -96,8 +98,8 @@ const AABB_UTILITIES = {
   },
 };
 
-class SceneGraph {
-  private nodes: { [key: NodeId]: SceneNode };
+export class CSGTree {
+  private nodes: { [key: NodeId]: CSGNode };
   public rootId: NodeId | null;
   private nextId: number;
 
@@ -242,7 +244,7 @@ class SceneGraph {
       this.updateNodeAABB(node.parent);
     } else {
       // root
-      console.log("got there!");
+      hasChanges.value = true;
       updateTreeBuffer(this.serializeTreeForWebGPU());
     }
   }
@@ -260,14 +262,30 @@ class SceneGraph {
     Object.assign(leafNode, newProps);
     this.updateNodeAABB(leafId);
   }
-  getNode(id: NodeId): SceneNode | undefined {
+
+  updateOperationNodeProperties(
+    opId: NodeId,
+    newProps: Partial<OperationParams>,
+  ): void {
+    /* ... same ... */
+    const opNode = this.nodes[opId];
+    if (!opNode || opNode.type !== "operation") {
+      console.warn(`Node ${opId} not found or not a operation node.`);
+      return;
+    }
+
+    Object.assign(opNode, newProps);
+    this.updateNodeAABB(opId);
+  }
+
+  getNode(id: NodeId): CSGNode | undefined {
     return this.nodes[id];
   }
-  getRoot(): SceneNode | undefined {
+  getRoot(): CSGNode | undefined {
     return this.rootId ? this.nodes[this.rootId] : undefined;
   }
   traverse(
-    callback: (node: SceneNode, depth: number) => void,
+    callback: (node: CSGNode, depth: number) => void,
     startNodeId?: NodeId,
     currentDepth: number = 0,
   ): void {
@@ -285,14 +303,14 @@ class SceneGraph {
   }
 
   private getNormalizedTree(): {
-    nodes: Map<NodeId, SceneNode>;
+    nodes: Map<NodeId, CSGNode>;
     rootId: NodeId | null;
   } {
     if (!this.rootId) {
       return { nodes: new Map(), rootId: null };
     }
 
-    const normalizedNodes = new Map<NodeId, SceneNode>();
+    const normalizedNodes = new Map<NodeId, CSGNode>();
     let nextId = 0;
     const generateNormalizedId = () => `norm-${nextId++}`;
 
@@ -301,7 +319,7 @@ class SceneGraph {
       newParentId?: NodeId,
     ): NodeId => {
       const originalNode = this.nodes[originalNodeId]!;
-      const newNode: SceneNode = structuredClone(originalNode);
+      const newNode: CSGNode = structuredClone(originalNode);
       newNode.id = generateNormalizedId();
       if (newParentId) {
         newNode.parent = newParentId;
@@ -407,7 +425,7 @@ class SceneGraph {
     }
 
     const nodeIndexMap = new Map<NodeId, number>();
-    const traversalOrder: SceneNode[] = [];
+    const traversalOrder: CSGNode[] = [];
 
     const dfs = (nodeId: NodeId) => {
       const node = normalizedNodes.get(nodeId);
@@ -537,7 +555,7 @@ class SceneGraph {
     const buffer = new Float32Array(totalSizeInFloats);
 
     flattenedTree.forEach((node, index) => {
-      const serializedNodeData = SceneGraph.serializeFlattenedNode(node);
+      const serializedNodeData = CSGTree.serializeFlattenedNode(node);
       buffer.set(serializedNodeData, index * nodeStrideInFloats);
     });
 
@@ -548,8 +566,8 @@ class SceneGraph {
 export function generateRandomBlobTree(
   numLeaves: number,
   numChildrenPerNode: number,
-): SceneGraph {
-  const sceneGraph = new SceneGraph();
+): CSGTree {
+  const sceneGraph = new CSGTree();
   if (numLeaves <= 0) {
     return sceneGraph;
   }
@@ -655,6 +673,6 @@ export function generateRandomBlobTree(
   return sceneGraph;
 }
 
-export const sceneGraph = generateRandomBlobTree(15, 5);
+export const csgTree = generateRandomBlobTree(15, 5);
 
-console.log(sceneGraph);
+console.log(csgTree);

@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import { sceneGraph } from "./blob-tree";
+import { NodeId, csgTree } from "./csg-tree";
 import playerControls from "./player-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { selectedNode } from "./selection";
 import { effect } from "@preact/signals";
+import { hasChanges } from "./has-changes";
 const scene = new THREE.Scene();
 
 const selectedMaterial = new THREE.MeshBasicMaterial({
@@ -22,27 +23,39 @@ const defaultMaterial = new THREE.MeshBasicMaterial({
 
 let spheres = new Set<THREE.Mesh>();
 
+function syncSphere(nodeId?: NodeId) {
+  if (!nodeId) return;
+  const node = csgTree.getNode(nodeId);
+  if (!node || node.type !== "leaf") return;
+  if (node.type === "leaf") {
+    let m = scene.getObjectByName(node.id);
+    let sphere = m as THREE.Mesh;
+    if (m) {
+      if (m.userData.scale !== node.scale) {
+        const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
+        sphere.geometry = geometry;
+      }
+    } else {
+      const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
+      sphere = new THREE.Mesh(geometry, defaultMaterial);
+      sphere.name = node.id;
+      scene.add(sphere);
+    }
+    sphere.userData.scale = node.scale;
+    sphere.position.set(
+      node.transform[12],
+      node.transform[13],
+      node.transform[14],
+    );
+    return sphere;
+  }
+}
+
 export function syncSpheres() {
   const new_spheres = new Set<THREE.Mesh>();
-  sceneGraph.traverse((node) => {
-    if (node.type === "leaf") {
-      let sphere: THREE.Mesh;
-      let m = scene.getObjectByName(node.id);
-      if (m) {
-        sphere = m as THREE.Mesh;
-      } else {
-        const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
-        sphere = new THREE.Mesh(geometry, defaultMaterial);
-        sphere.name = node.id;
-        scene.add(sphere);
-      }
-      sphere.position.set(
-        node.transform[12],
-        node.transform[13],
-        node.transform[14],
-      );
-      new_spheres.add(sphere);
-    }
+  csgTree.traverse((node) => {
+    const sphere = syncSphere(node.id);
+    if (sphere) new_spheres.add(sphere);
   });
   for (let sphere of spheres) {
     if (!new_spheres.has(sphere)) {
@@ -82,8 +95,6 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     const intersections = raycaster.intersectObjects([...spheres]);
     const first = intersections[0];
 
-    console.log(first);
-
     if (first) {
       selectedNode.value = first.object.name;
     } else {
@@ -99,16 +110,16 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     const obj = transform_controls.object;
     if (!obj) return;
 
-    const node = sceneGraph.getNode(obj.name);
+    const node = csgTree.getNode(obj.name);
     if (!node || node.type !== "leaf") return;
 
     const transform = obj.matrixWorld.toArray();
 
-    sceneGraph.updateLeafNodeProperties(obj.name, {
+    csgTree.updateLeafNodeProperties(obj.name, {
       transform,
     });
 
-    playerControls.hasChanges = transform_controls.dragging;
+    hasChanges.value = transform_controls.dragging;
   }
 
   transform_controls.addEventListener("change", worldPositionChanged);
@@ -146,4 +157,11 @@ effect(() => {
 
   transform_controls.attach(obj);
   obj.material = selectedMaterial;
+});
+
+effect(() => {
+  if (hasChanges.value) {
+    console.log("yes");
+    syncSphere(selectedNode.value ?? undefined);
+  }
 });

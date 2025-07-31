@@ -1,11 +1,18 @@
-import { signal } from "@preact/signals";
-import { sceneGraph } from "../../blob-tree";
+import { effect, signal } from "@preact/signals";
+import { csgTree } from "../../csg-tree";
+import { hasChanges } from "../../has-changes";
 
-export const blobTree = signal(sceneGraph);
+export const csgChangeCounter = signal(0);
+
+effect(() => {
+  if (hasChanges.value) {
+    csgChangeCounter.value = csgChangeCounter.peek() + 1;
+  }
+});
 
 const initialCollapsed = new Set();
-blobTree.value.traverse((node) => {
-  if (node.type === "operation" && node.id !== blobTree.value.rootId) {
+csgTree.traverse((node) => {
+  if (node.type === "operation" && node.id !== csgTree.rootId) {
     initialCollapsed.add(node.id);
   }
 });

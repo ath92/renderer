@@ -5,9 +5,10 @@ import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
 import { initThreeScene } from "./three-init";
-import { sceneGraph } from "./blob-tree";
+import { csgTree } from "./csg-tree";
 //@ts-ignore
 import PoissonDisk from "fast-2d-poisson-disk-sampling";
+import { hasChanges } from "./has-changes";
 
 const urlParams = new URLSearchParams(window.location.search);
 const fractal = urlParams.get("fractal") || "mandelbulb";
@@ -102,7 +103,7 @@ async function main() {
   });
 
   // Storage buffer for the blob tree
-  const flattenedTree = sceneGraph.serializeTreeForWebGPU();
+  const flattenedTree = csgTree.serializeTreeForWebGPU();
   treeBuffer = createBuffer(
     device,
     flattenedTree,
@@ -298,7 +299,7 @@ async function main() {
       }).fill();
 
       shuffleArray(offsets);
-      offsets.unshift([0, 0]);
+      offsets.unshift([repeat / 2, repeat / 2]);
 
       return {
         fbo: texture,
@@ -327,11 +328,12 @@ async function main() {
 
   function loop() {
     const state = playerControls.state;
-    playerControls.hasChanges = false;
+    const has_changes = hasChanges.value;
+    hasChanges.value = false;
     const { fbo, shape, offsets } = precisionFbos[performance];
     const [source, target] = pingpong(frame);
     if (!from) from = source;
-    if (state.hasChanges) {
+    if (has_changes) {
       step = 0;
     }
 
@@ -466,15 +468,15 @@ async function main() {
       const current = Date.now();
       const diff = current - start;
       start = current;
-      if (state.hasChanges) {
+      if (has_changes) {
         const avgFrameTime = diff / FRAMES;
         const fps = 1000 / avgFrameTime;
         console.log(frame, fps);
         // console.log("fps", fps);
         let nextPerformance: number = performance;
-        if (fps > 60 - MARGIN) {
+        if (fps > 120 - MARGIN) {
           nextPerformance = Math.max(0, performance - 1);
-        } else if (fps < 30 - MARGIN) {
+        } else if (fps < 60 - MARGIN) {
           nextPerformance = Math.min(maxPerformance - 1, performance + 1);
         }
         // nextPerformance = 3;

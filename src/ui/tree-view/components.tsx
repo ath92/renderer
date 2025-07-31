@@ -1,7 +1,8 @@
-import { blobTree, collapsedNodes, toggleNode } from "./state";
+import { collapsedNodes, csgChangeCounter, toggleNode } from "./state";
 import "./style.css";
-import { SceneNode, Operation } from "../../blob-tree";
+import { CSGNode, Operation, csgTree, NodeId } from "../../csg-tree";
 import { selectedNode } from "../../selection";
+import { useRef } from "preact/hooks";
 
 const OperationMap: Record<Operation, string> = {
   [Operation.Union]: "Union",
@@ -19,7 +20,7 @@ function selectNodeHandler(nodeId: string) {
   };
 }
 
-function LeafNode({ node }: { node: SceneNode }) {
+function LeafNode({ node }: { node: CSGNode }) {
   return (
     <div
       class={`tree-node leaf-node ${selectedClass(node.id)}`}
@@ -30,7 +31,7 @@ function LeafNode({ node }: { node: SceneNode }) {
   );
 }
 
-function OperationNode({ node }: { node: SceneNode }) {
+function OperationNode({ node }: { node: CSGNode }) {
   if (node.type !== "operation") return null;
   const isCollapsed = collapsedNodes.value.has(node.id);
 
@@ -46,7 +47,7 @@ function OperationNode({ node }: { node: SceneNode }) {
       {!isCollapsed && (
         <div class="children">
           {node.children.map((childId: string) => {
-            const childNode = blobTree.value.getNode(childId);
+            const childNode = csgTree.getNode(childId);
             return childNode ? <TreeNode node={childNode} /> : null;
           })}
         </div>
@@ -55,7 +56,7 @@ function OperationNode({ node }: { node: SceneNode }) {
   );
 }
 
-function TreeNode({ node }: { node: SceneNode }) {
+function TreeNode({ node }: { node: CSGNode }) {
   if (node.type === "leaf") {
     return <LeafNode node={node} />;
   }
@@ -63,7 +64,8 @@ function TreeNode({ node }: { node: SceneNode }) {
 }
 
 export function TreeView() {
-  const rootNode = blobTree.value.getRoot();
+  csgChangeCounter.value;
+  const rootNode = csgTree.getRoot();
 
   if (!rootNode) {
     return <div>No data</div>;
@@ -72,6 +74,133 @@ export function TreeView() {
   return (
     <div id="tree-view">
       <TreeNode node={rootNode} />
+    </div>
+  );
+}
+
+export function SelectedNodeSettings() {
+  const selectedNodeId = selectedNode.value;
+  if (!selectedNodeId) return null;
+  const node = csgTree.getNode(selectedNodeId);
+  if (!node) return null;
+
+  return (
+    <div>
+      <hr></hr>
+      <div className="settings-row">
+        <h2>Node settings</h2>
+      </div>
+      {node.type === "leaf" ? (
+        <LeafNodeSettings id={node.id} />
+      ) : (
+        <OpNodeSettings id={node.id} />
+      )}
+    </div>
+  );
+}
+
+function LeafNodeSettings({ id }: { id: NodeId }) {
+  const node = csgTree.getNode(id);
+  const radiusInputRef = useRef<HTMLInputElement>(null);
+  if (!node) return null;
+
+  function onChange() {
+    const input = radiusInputRef.current;
+    if (!input) return;
+
+    const value = parseFloat(input.value);
+    if (Number.isNaN(value)) return;
+
+    csgTree.updateLeafNodeProperties(id, {
+      scale: value,
+    });
+  }
+
+  if (node.type !== "leaf")
+    throw new Error("leaf settings rendered for op node");
+
+  return (
+    <div>
+      <div className="settings-row">
+        <span>Radius</span>
+        <input
+          ref={radiusInputRef}
+          step={0.05}
+          type="number"
+          onChange={onChange}
+          value={node.scale.toFixed(2)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function OpNodeSettings({ id }: { id: NodeId }) {
+  const node = csgTree.getNode(id);
+  const smoothingInputRef = useRef<HTMLInputElement>(null);
+  const operationInputRef = useRef<HTMLSelectElement>(null);
+  if (!node) return null;
+  if (node.type !== "operation")
+    throw new Error("op settings rendered for leaf node");
+
+  function onChange() {
+    const input = smoothingInputRef.current;
+    if (!input) return;
+
+    const value = parseFloat(input.value);
+    if (Number.isNaN(value)) return;
+
+    csgTree.updateOperationNodeProperties(id, {
+      smoothing: value,
+    });
+  }
+
+  function onChangeOperation() {
+    const input = operationInputRef.current;
+    if (!input) return;
+
+    let newOperation = Operation.Union;
+    // explicit back mapping
+    switch (input.value) {
+      case "0":
+        newOperation = Operation.Union;
+        break;
+      case "1":
+        newOperation = Operation.Difference;
+        break;
+      case "2":
+        newOperation = Operation.Intersect;
+        break;
+    }
+    csgTree.updateOperationNodeProperties(id, {
+      op: newOperation,
+    });
+  }
+
+  return (
+    <div>
+      <div className="settings-row">
+        <span>Smoothing</span>
+        <input
+          ref={smoothingInputRef}
+          step={0.05}
+          type="number"
+          onChange={onChange}
+          value={node.smoothing.toFixed(2)}
+        />
+      </div>
+      <div className="settings-row">
+        <span>Operation</span>
+        <select
+          onChange={onChangeOperation}
+          ref={operationInputRef}
+          value={node.op}
+        >
+          <option value="0">Union</option>
+          <option value="1">Difference</option>
+          <option value="2">Intersect</option>
+        </select>
+      </div>
     </div>
   );
 }
