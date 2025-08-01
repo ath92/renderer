@@ -1,4 +1,4 @@
-import { effect, signal } from "@preact/signals";
+import { effect, signal } from "@preact/signals-react";
 import { csgTree } from "../../csg-tree";
 import { hasChanges } from "../../has-changes";
 

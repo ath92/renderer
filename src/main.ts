@@ -4,7 +4,7 @@ import playerControls from "./player-controls";
 import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
-import { initThreeScene } from "./three-init";
+
 import { csgTree } from "./csg-tree";
 //@ts-ignore
 import PoissonDisk from "fast-2d-poisson-disk-sampling";
@@ -23,19 +23,12 @@ let repeat = 2 ** performance;
 const webgpuCanvas = document.getElementById(
   "webgpu-canvas",
 ) as HTMLCanvasElement;
-const threejsCanvas = document.getElementById(
-  "threejs-canvas",
-) as HTMLCanvasElement;
 
 // resize to prevent rounding errors
 const width = window.innerWidth - (window.innerWidth % 8);
 const height = window.innerHeight - (window.innerHeight % 8);
 webgpuCanvas.width = width;
 webgpuCanvas.height = height;
-threejsCanvas.width = width;
-threejsCanvas.height = height;
-
-initThreeScene(threejsCanvas);
 
 let frame = 0;
 let step = 0;

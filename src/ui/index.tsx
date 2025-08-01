@@ -1,15 +1,22 @@
-import { render } from "preact";
+import { createRoot } from "react-dom/client";
+import { R3fRenderer } from "./three/r3f-renderer";
 import { SelectedNodeSettings, TreeView } from "./tree-view/components";
 
 export function App() {
   return (
-    <div id="left-panel">
-      <TreeView />
-      <SelectedNodeSettings />
-    </div>
+    <>
+      <div id="left-panel">
+        <TreeView />
+        <SelectedNodeSettings />
+      </div>
+    </>
   );
 }
 
 export function initUI() {
-  render(<App />, document.getElementById("ui-root")!);
+  const root = createRoot(document.getElementById("ui-root")!);
+  root.render(<App />);
+
+  const viewportRoot = createRoot(document.getElementById("viewport")!);
+  viewportRoot.render(<R3fRenderer />);
 }

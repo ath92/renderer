@@ -3,7 +3,7 @@ import { NodeId, csgTree } from "./csg-tree";
 import playerControls from "./player-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { selectedNode } from "./selection";
-import { effect } from "@preact/signals";
+import { effect } from "@preact/signals-react";
 import { hasChanges } from "./has-changes";
 const scene = new THREE.Scene();
 

@@ -1,3 +1,3 @@
-import { signal } from "@preact/signals";
+import { signal } from "@preact/signals-react";
 
 export const hasChanges = signal(true);

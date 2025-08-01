@@ -1,7 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { updateTreeBuffer } from "./main";
 import { hasChanges } from "./has-changes";
-import { syncSpheres } from "./three-init";
 
 // Using a type alias for the ID for clarity
 export type NodeId = string;
@@ -631,13 +630,6 @@ export function generateRandomBlobTree(
           parent_bbox_center[1],
         (Math.random() - 0.5) * 1.2 * parent_bbox_size[2] +
           parent_bbox_center[2],
-      );
-      console.log(
-        parent,
-        Math.min(
-          Math.min(parent_bbox_size[0], parent_bbox_size[1]),
-          parent_bbox_size[2],
-        ),
       );
       const scale =
         Math.random() *

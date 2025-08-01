@@ -2,7 +2,7 @@ import { collapsedNodes, csgChangeCounter, toggleNode } from "./state";
 import "./style.css";
 import { CSGNode, Operation, csgTree, NodeId } from "../../csg-tree";
 import { selectedNode } from "../../selection";
-import { useRef } from "preact/hooks";
+import { MouseEvent, useRef } from "react";
 
 const OperationMap: Record<Operation, string> = {
   [Operation.Union]: "Union",
@@ -15,7 +15,7 @@ function selectedClass(nodeId: string) {
 }
 function selectNodeHandler(nodeId: string) {
   return (e: MouseEvent) => {
-    e.stopImmediatePropagation();
+    e.stopPropagation();
     selectedNode.value = nodeId;
   };
 }
@@ -23,7 +23,7 @@ function selectNodeHandler(nodeId: string) {
 function LeafNode({ node }: { node: CSGNode }) {
   return (
     <div
-      class={`tree-node leaf-node ${selectedClass(node.id)}`}
+      className={`tree-node leaf-node ${selectedClass(node.id)}`}
       onClick={selectNodeHandler(node.id)}
     >
       {node.name}
@@ -37,18 +37,20 @@ function OperationNode({ node }: { node: CSGNode }) {
 
   return (
     <div
-      class={`tree-node operation-node ${selectedClass(node.id)}`}
+      className={`tree-node operation-node ${selectedClass(node.id)}`}
       onClick={selectNodeHandler(node.id)}
     >
-      <div class="node-details" onClick={() => toggleNode(node.id)}>
+      <div className="node-details" onClick={() => toggleNode(node.id)}>
         <span>{node.name}</span>
-        <span class="operation-type">{OperationMap[node.op]}</span>
+        <span className="operation-type">{OperationMap[node.op]}</span>
       </div>
       {!isCollapsed && (
-        <div class="children">
+        <div className="children">
           {node.children.map((childId: string) => {
             const childNode = csgTree.getNode(childId);
-            return childNode ? <TreeNode node={childNode} /> : null;
+            return childNode ? (
+              <TreeNode key={childId} node={childNode} />
+            ) : null;
           })}
         </div>
       )}
