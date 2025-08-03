@@ -1,7 +1,7 @@
 import { signal, useSignalEffect } from "@preact/signals-react";
 import { depthReadback } from "../main";
 import { csgTree } from "../csg-tree";
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, vec3, vec4 } from "gl-matrix";
 import playerControls, { forward } from "../player-controls";
 import { hasChanges } from "../has-changes";
 
@@ -18,11 +18,25 @@ function usePlaceSphereTool() {
       const y = e.clientY;
 
       const depth = await depthReadback(x, y);
-      const dir = vec3.transformMat4(
-        vec3.create(),
-        forward,
+
+      const pixelX =
+        (x - window.innerWidth / 2) /
+        Math.min(window.innerWidth, window.innerHeight);
+      const pixelY =
+        (y - window.innerHeight / 2) /
+        Math.min(window.innerWidth, window.innerHeight);
+
+      const rayDirectionVec4 = vec4.fromValues(pixelX, -pixelY, 1.0, 0.0);
+      const transformedDir = vec4.transformMat4(
+        vec4.create(),
+        rayDirectionVec4,
         playerControls.state.cameraDirection,
       );
+      const dir = vec3.normalize(
+        vec3.create(),
+        vec3.fromValues(transformedDir[0], transformedDir[1], transformedDir[2]),
+      );
+
       const pos = vec3.add(
         vec3.create(),
         playerControls.state.cameraPosition,
