@@ -1,7 +1,7 @@
 import { vec3, mat4, quat, mat3 } from "gl-matrix";
 import { hasChanges } from "./has-changes";
 
-const forward = vec3.fromValues(0, 0, 1);
+export const forward = vec3.fromValues(0, 0, 1);
 const backward = vec3.fromValues(0, 0, -1);
 const left = vec3.fromValues(-1, 0, 0);
 const right = vec3.fromValues(1, 0, 0);
@@ -239,9 +239,9 @@ class PlayerControls {
       hasChanges: has_changes,
       scrollX: this.scrollX,
       scrollY: this.scrollY,
-      cameraPosition: [...this.position],
+      cameraPosition: vec3.clone(this.position),
       cameraDirection,
-      cameraDirectionQuat: [...this.direction],
+      cameraDirectionQuat: quat.clone(this.direction),
       cameraMatrix,
     };
   }

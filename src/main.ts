@@ -62,6 +62,8 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 
 var treeBuffer: GPUBuffer | null = null;
 
+var depthReadbackBuffer: GPUBuffer | null = null;
+
 export function updateTreeBuffer(flattenedTree: Float32Array) {
   if (!treeBuffer) return;
   updateBuffer(getDevice(), treeBuffer, flattenedTree);
@@ -326,7 +328,7 @@ async function main() {
   });
 
   const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
-  const depthReadbackBuffer = device.createBuffer({
+  depthReadbackBuffer = device.createBuffer({
     size: bytesPerRow * height,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
@@ -441,14 +443,12 @@ async function main() {
       passEncoder.draw(6);
       passEncoder.end();
 
-      if (true) {
-        const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
-        commandEncoder.copyTextureToBuffer(
-          { texture: targetDepth },
-          { buffer: depthReadbackBuffer, bytesPerRow },
-          { width, height },
-        );
-      }
+      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+      commandEncoder.copyTextureToBuffer(
+        { texture: targetDepth },
+        { buffer: depthReadbackBuffer!, bytesPerRow },
+        { width, height },
+      );
 
       const canvasView = context.getCurrentTexture().createView();
       const blitBindGroup = createBindGroup(device, blitBindGroupLayout, [
@@ -507,20 +507,23 @@ async function main() {
   }
 
   loop();
-
-  window.addEventListener("click", (e: MouseEvent) => {
-    depthReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
-      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
-      const depthData = new Float32Array(depthReadbackBuffer.getMappedRange());
-      console.log("Depth data:", depthData.length, width * height);
-      const row = Math.round(e.clientY - webgpuCanvas.offsetTop);
-      const col = Math.round(e.clientX - webgpuCanvas.offsetLeft);
-      const index = (row * bytesPerRow) / 4 + col;
-      console.log("depth at pixel", depthData[index], index);
-      depthReadbackBuffer.unmap();
-    });
-  });
 }
 
 main();
 initUI();
+
+export async function depthReadback(x: number, y: number) {
+  if (!depthReadbackBuffer)
+    throw new Error("depth readback buffer not initialized");
+  return depthReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
+    const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+    const depthData = new Float32Array(depthReadbackBuffer!.getMappedRange());
+    console.log("Depth data:", depthData.length, width * height);
+    const row = Math.round(y - webgpuCanvas.offsetTop);
+    const col = Math.round(x - webgpuCanvas.offsetLeft);
+    const index = (row * bytesPerRow) / 4 + col;
+    console.log("depth at pixel", depthData[index], index);
+    depthReadbackBuffer!.unmap();
+    return depthData[index];
+  });
+}
