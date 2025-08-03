@@ -3,6 +3,7 @@ import "./style.css";
 import { CSGNode, Operation, csgTree, NodeId } from "../../csg-tree";
 import { selectedNode } from "../../selection";
 import { MouseEvent, useRef } from "react";
+import { hasChanges } from "../../has-changes";
 
 const OperationMap: Record<Operation, string> = {
   [Operation.Union]: "Union",
@@ -68,13 +69,14 @@ function TreeNode({ node }: { node: CSGNode }) {
 export function TreeView() {
   csgChangeCounter.value;
   const rootNode = csgTree.getRoot();
+  console.log("re-render tree!");
 
   if (!rootNode) {
     return <div>No data</div>;
   }
 
   return (
-    <div id="tree-view">
+    <div id="tree-view" data-bla={hasChanges.value}>
       <TreeNode node={rootNode} />
     </div>
   );

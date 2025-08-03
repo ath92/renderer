@@ -61,12 +61,57 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 });
 
 var treeBuffer: GPUBuffer | null = null;
+var uniformBuffer: GPUBuffer | null = null;
+var fractalBindGroupLayout: GPUBindGroupLayout | null = null;
+var fractalBindGroup: GPUBindGroup | null = null;
 
 var depthReadbackBuffer: GPUBuffer | null = null;
 
+let depthReadbackPromise: Promise<number> | null = null;
+export async function depthReadback(x: number, y: number) {
+  if (!depthReadbackBuffer)
+    throw new Error("depth readback buffer not initialized");
+
+  depthReadbackPromise = depthReadbackBuffer
+    .mapAsync(GPUMapMode.READ)
+    .then(() => {
+      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+      const depthData = new Float32Array(depthReadbackBuffer!.getMappedRange());
+      console.log("Depth data:", depthData.length, width * height);
+      const row = Math.round(y - webgpuCanvas.offsetTop);
+      const col = Math.round(x - webgpuCanvas.offsetLeft);
+      const index = (row * bytesPerRow) / 4 + col;
+      const d = depthData[index];
+      console.log("depth at pixel", d, index);
+      depthReadbackBuffer!.unmap();
+      return d;
+    });
+
+  return depthReadbackPromise;
+}
+
 export function updateTreeBuffer(flattenedTree: Float32Array) {
-  if (!treeBuffer) return;
-  updateBuffer(getDevice(), treeBuffer, flattenedTree);
+  const device = getDevice();
+  if (!device || !treeBuffer || !uniformBuffer || !fractalBindGroupLayout)
+    return;
+
+  if (flattenedTree.byteLength > treeBuffer.size) {
+    console.log(
+      `Resizing tree buffer from ${treeBuffer.size} to ${flattenedTree.byteLength}`,
+    );
+    treeBuffer.destroy();
+    treeBuffer = createBuffer(
+      device,
+      flattenedTree,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    );
+    fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+      { binding: 0, resource: { buffer: uniformBuffer } },
+      { binding: 1, resource: { buffer: treeBuffer } },
+    ]);
+  } else {
+    updateBuffer(device, treeBuffer, flattenedTree);
+  }
 }
 
 async function main() {
@@ -83,7 +128,7 @@ async function main() {
 
   // Uniform buffer for SDF uniforms
   const uniformBufferSize = 128;
-  const uniformBuffer = device.createBuffer({
+  uniformBuffer = device.createBuffer({
     size: Math.ceil(uniformBufferSize / 32) * 32,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
   });
@@ -137,7 +182,7 @@ async function main() {
   });
 
   // Create bind group layout and bind group for fractal rendering
-  const fractalBindGroupLayout = createBindGroupLayout(device, [
+  fractalBindGroupLayout = createBindGroupLayout(device, [
     {
       binding: 0,
       visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
@@ -149,7 +194,7 @@ async function main() {
       buffer: { type: "read-only-storage" },
     },
   ]);
-  const fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+  fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
     { binding: 0, resource: { buffer: uniformBuffer } },
     { binding: 1, resource: { buffer: treeBuffer } },
   ]);
@@ -341,9 +386,11 @@ async function main() {
   let from: GPUTexture, fromDepth: GPUTexture;
   let start = Date.now();
 
-  function loop() {
+  async function loop() {
+    if (depthReadbackPromise) await depthReadbackPromise;
     const state = playerControls.state;
     const has_changes = hasChanges.value;
+    if (has_changes) updateTreeBuffer(csgTree.serializeTreeForWebGPU());
     hasChanges.value = false;
     const { fbo, shape, offsets } = precisionFbos[performance];
     const [source, target, sourceDepth, targetDepth] = pingpong(frame);
@@ -375,7 +422,7 @@ async function main() {
         state.scrollY,
         0,
       ]);
-      updateBuffer(device, uniformBuffer, uniformValues);
+      updateBuffer(device, uniformBuffer!, uniformValues);
 
       const commandEncoder = device.createCommandEncoder();
 
@@ -392,7 +439,7 @@ async function main() {
       let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
       passEncoder.setPipeline(fractalRenderPipeline);
       passEncoder.setVertexBuffer(0, vertexBuffer);
-      passEncoder.setBindGroup(0, fractalBindGroup);
+      passEncoder.setBindGroup(0, fractalBindGroup!);
       passEncoder.draw(6);
       passEncoder.end();
 
@@ -511,19 +558,3 @@ async function main() {
 
 main();
 initUI();
-
-export async function depthReadback(x: number, y: number) {
-  if (!depthReadbackBuffer)
-    throw new Error("depth readback buffer not initialized");
-  return depthReadbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
-    const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
-    const depthData = new Float32Array(depthReadbackBuffer!.getMappedRange());
-    console.log("Depth data:", depthData.length, width * height);
-    const row = Math.round(y - webgpuCanvas.offsetTop);
-    const col = Math.round(x - webgpuCanvas.offsetLeft);
-    const index = (row * bytesPerRow) / 4 + col;
-    console.log("depth at pixel", depthData[index], index);
-    depthReadbackBuffer!.unmap();
-    return depthData[index];
-  });
-}

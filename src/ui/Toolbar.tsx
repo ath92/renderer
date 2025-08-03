@@ -1,9 +1,9 @@
 import { signal, useSignalEffect } from "@preact/signals-react";
-import { useSignals } from "@preact/signals-react/runtime";
 import { depthReadback } from "../main";
 import { csgTree } from "../csg-tree";
 import { mat4, vec3 } from "gl-matrix";
 import playerControls, { forward } from "../player-controls";
+import { hasChanges } from "../has-changes";
 
 export type Tool = "PlaceSphere";
 
@@ -28,21 +28,24 @@ function usePlaceSphereTool() {
         playerControls.state.cameraPosition,
         vec3.scale(vec3.create(), dir, depth),
       );
+
+      console.log(dir, pos, depth);
       csgTree.addLeafNode(
         {
           transform: mat4.fromTranslation(mat4.create(), pos),
           scale: 1,
+          name: "placed node!",
         },
         csgTree.rootId!,
       );
     }
+    hasChanges.value = true;
     window.addEventListener("click", placeSphere);
     return () => window.removeEventListener("click", placeSphere);
   });
 }
 
 export function Toolbar() {
-  useSignals();
   usePlaceSphereTool();
 
   return (

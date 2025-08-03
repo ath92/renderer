@@ -244,7 +244,6 @@ export class CSGTree {
     } else {
       // root
       hasChanges.value = true;
-      updateTreeBuffer(this.serializeTreeForWebGPU());
     }
   }
   updateLeafNodeProperties(
