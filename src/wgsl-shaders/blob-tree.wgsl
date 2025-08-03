@@ -285,8 +285,8 @@ fn main(in: VertexOutput) -> @location(0) vec4<f32> {
         let light_dir = normalize(cross(ray_dir, vec3(1., 0., -0.)) + ray_dir);
         let diffuse = max(dot(-normal, light_dir), 0.1);
 
-        return vec4<f32>(diffuse, diffuse, diffuse, 1.0);
+        return vec4<f32>(diffuse, diffuse, diffuse, distance(result.position, ray_origin));
     }
 
-    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    return vec4<f32>(0.0, 0.0, 0.0, config.max_distance);
 }
