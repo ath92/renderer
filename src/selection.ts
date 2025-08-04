@@ -1,4 +1,4 @@
 import { signal } from "@preact/signals-react";
-import { NodeId } from "./csg-tree";
+import { TreeID } from "loro-crdt";
 
-export const selectedNode = signal<NodeId | null>(null);
+export const selectedNode = signal<TreeID | null>(null);

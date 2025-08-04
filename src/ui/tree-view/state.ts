@@ -12,7 +12,7 @@ effect(() => {
 
 const initialCollapsed = new Set();
 csgTree.traverse((node) => {
-  if (node.type === "operation" && node.id !== csgTree.rootId) {
+  if (node.data.get("type") === "operation" && node !== csgTree.getRoot()) {
     initialCollapsed.add(node.id);
   }
 });

@@ -23,6 +23,7 @@
     "@webgpu/types": "^0.1.64",
     "fast-2d-poisson-disk-sampling": "^1.0.3",
     "gl-matrix": "^3.4.3",
+    "loro-crdt": "^1.5.9",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "three": "^0.178.0"

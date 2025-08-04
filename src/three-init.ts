@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { NodeId, csgTree } from "./csg-tree";
+import { csgTree, isLeafNode } from "./csg-tree";
 import playerControls from "./player-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { selectedNode } from "./selection";
 import { effect } from "@preact/signals-react";
 import { hasChanges } from "./has-changes";
+import { TreeID } from "loro-crdt";
 const scene = new THREE.Scene();
 
 const selectedMaterial = new THREE.MeshBasicMaterial({
@@ -23,32 +24,30 @@ const defaultMaterial = new THREE.MeshBasicMaterial({
 
 let spheres = new Set<THREE.Mesh>();
 
-function syncSphere(nodeId?: NodeId) {
+function syncSphere(nodeId?: TreeID) {
   if (!nodeId) return;
   const node = csgTree.getNode(nodeId);
-  if (!node || node.type !== "leaf") return;
-  if (node.type === "leaf") {
-    let m = scene.getObjectByName(node.id);
-    let sphere = m as THREE.Mesh;
-    if (m) {
-      if (m.userData.scale !== node.scale) {
-        const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
-        sphere.geometry = geometry;
-      }
-    } else {
-      const geometry = new THREE.SphereGeometry(node.scale, 16, 8);
-      sphere = new THREE.Mesh(geometry, defaultMaterial);
-      sphere.name = node.id;
-      scene.add(sphere);
+  if (!node || !isLeafNode(node)) return;
+  let m = scene.getObjectByName(node.id);
+  let sphere = m as THREE.Mesh;
+  if (m) {
+    if (m.userData.scale !== node.data.get("scale")) {
+      const geometry = new THREE.SphereGeometry(node.data.get("scale"), 16, 8);
+      sphere.geometry = geometry;
     }
-    sphere.userData.scale = node.scale;
-    sphere.position.set(
-      node.transform[12],
-      node.transform[13],
-      node.transform[14],
-    );
-    return sphere;
+  } else {
+    const geometry = new THREE.SphereGeometry(node.data.get("scale"), 16, 8);
+    sphere = new THREE.Mesh(geometry, defaultMaterial);
+    sphere.name = node.id;
+    scene.add(sphere);
   }
+  sphere.userData.scale = node.data.get("scale");
+  sphere.position.set(
+    node.data.get("transform")[12],
+    node.data.get("transform")[13],
+    node.data.get("transform")[14],
+  );
+  return sphere;
 }
 
 export function syncSpheres() {
@@ -96,7 +95,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     const first = intersections[0];
 
     if (first) {
-      selectedNode.value = first.object.name;
+      selectedNode.value = first.object.name as TreeID;
     } else {
       selectedNode.value = null;
     }
@@ -110,12 +109,12 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
     const obj = transform_controls.object;
     if (!obj) return;
 
-    const node = csgTree.getNode(obj.name);
-    if (!node || node.type !== "leaf") return;
+    const node = csgTree.getNode(obj.name as TreeID);
+    if (!node || !isLeafNode(node)) return;
 
     const transform = obj.matrixWorld.toArray();
 
-    csgTree.updateLeafNodeProperties(obj.name, {
+    csgTree.updateLeafNodeProperties(node, {
       transform,
     });
 

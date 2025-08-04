@@ -1,9 +1,18 @@
 import { collapsedNodes, csgChangeCounter, toggleNode } from "./state";
 import "./style.css";
-import { CSGNode, Operation, csgTree, NodeId } from "../../csg-tree";
+import {
+  CSGNode,
+  Operation,
+  csgTree,
+  TreeNode,
+  OperationTreeNode,
+  isOperationNode,
+  isLeafNode,
+} from "../../csg-tree";
 import { selectedNode } from "../../selection";
 import { MouseEvent, useRef } from "react";
 import { hasChanges } from "../../has-changes";
+import { TreeID } from "loro-crdt";
 
 const OperationMap: Record<Operation, string> = {
   [Operation.Union]: "Union",
@@ -14,26 +23,26 @@ const OperationMap: Record<Operation, string> = {
 function selectedClass(nodeId: string) {
   return nodeId === selectedNode.value ? " selected " : "";
 }
-function selectNodeHandler(nodeId: string) {
+function selectNodeHandler(nodeId: TreeID) {
   return (e: MouseEvent) => {
     e.stopPropagation();
     selectedNode.value = nodeId;
   };
 }
 
-function LeafNode({ node }: { node: CSGNode }) {
+function LeafNode({ node }: { node: TreeNode }) {
   return (
     <div
       className={`tree-node leaf-node ${selectedClass(node.id)}`}
       onClick={selectNodeHandler(node.id)}
     >
-      {node.name}
+      {node.data.get("name")}
     </div>
   );
 }
 
-function OperationNode({ node }: { node: CSGNode }) {
-  if (node.type !== "operation") return null;
+function OperationNode({ node }: { node: OperationTreeNode }) {
+  if (node.data.get("type") !== "operation") return null;
   const isCollapsed = collapsedNodes.value.has(node.id);
 
   return (
@@ -42,15 +51,16 @@ function OperationNode({ node }: { node: CSGNode }) {
       onClick={selectNodeHandler(node.id)}
     >
       <div className="node-details" onClick={() => toggleNode(node.id)}>
-        <span>{node.name}</span>
-        <span className="operation-type">{OperationMap[node.op]}</span>
+        <span>{node.data.get("name")}</span>
+        <span className="operation-type">
+          {OperationMap[node.data.get("op")]}
+        </span>
       </div>
       {!isCollapsed && (
         <div className="children">
-          {node.children.map((childId: string) => {
-            const childNode = csgTree.getNode(childId);
+          {(node.children() ?? []).map((childNode) => {
             return childNode ? (
-              <TreeNode key={childId} node={childNode} />
+              <TreeNode key={childNode.id} node={childNode} />
             ) : null;
           })}
         </div>
@@ -59,11 +69,11 @@ function OperationNode({ node }: { node: CSGNode }) {
   );
 }
 
-function TreeNode({ node }: { node: CSGNode }) {
-  if (node.type === "leaf") {
+function TreeNode({ node }: { node: TreeNode }) {
+  if (node.data.get("type") === "leaf") {
     return <LeafNode node={node} />;
   }
-  return <OperationNode node={node} />;
+  return <OperationNode node={node as OperationTreeNode} />;
 }
 
 export function TreeView() {
@@ -85,7 +95,7 @@ export function TreeView() {
 export function SelectedNodeSettings() {
   const selectedNodeId = selectedNode.value;
   if (!selectedNodeId) return null;
-  const node = csgTree.getNode(selectedNodeId);
+  const node = csgTree.tree.getNodeByID(selectedNodeId);
   if (!node) return null;
 
   return (
@@ -94,7 +104,7 @@ export function SelectedNodeSettings() {
       <div className="settings-row">
         <h2>Node settings</h2>
       </div>
-      {node.type === "leaf" ? (
+      {node.data.get("type") === "leaf" ? (
         <LeafNodeSettings id={node.id} />
       ) : (
         <OpNodeSettings id={node.id} />
@@ -103,7 +113,7 @@ export function SelectedNodeSettings() {
   );
 }
 
-function LeafNodeSettings({ id }: { id: NodeId }) {
+function LeafNodeSettings({ id }: { id: TreeID }) {
   const node = csgTree.getNode(id);
   const radiusInputRef = useRef<HTMLInputElement>(null);
   if (!node) return null;
@@ -115,13 +125,12 @@ function LeafNodeSettings({ id }: { id: NodeId }) {
     const value = parseFloat(input.value);
     if (Number.isNaN(value)) return;
 
-    csgTree.updateLeafNodeProperties(id, {
+    csgTree.updateLeafNodeProperties(node, {
       scale: value,
     });
   }
 
-  if (node.type !== "leaf")
-    throw new Error("leaf settings rendered for op node");
+  if (!isLeafNode(node)) throw new Error("leaf settings rendered for op node");
 
   return (
     <div>
@@ -132,19 +141,19 @@ function LeafNodeSettings({ id }: { id: NodeId }) {
           step={0.05}
           type="number"
           onChange={onChange}
-          value={node.scale.toFixed(2)}
+          value={node.data.get("scale").toFixed(2)}
         />
       </div>
     </div>
   );
 }
 
-function OpNodeSettings({ id }: { id: NodeId }) {
+function OpNodeSettings({ id }: { id: TreeID }) {
   const node = csgTree.getNode(id);
   const smoothingInputRef = useRef<HTMLInputElement>(null);
   const operationInputRef = useRef<HTMLSelectElement>(null);
   if (!node) return null;
-  if (node.type !== "operation")
+  if (!isOperationNode(node))
     throw new Error("op settings rendered for leaf node");
 
   function onChange() {
@@ -154,7 +163,7 @@ function OpNodeSettings({ id }: { id: NodeId }) {
     const value = parseFloat(input.value);
     if (Number.isNaN(value)) return;
 
-    csgTree.updateOperationNodeProperties(id, {
+    csgTree.updateOperationNodeProperties(node, {
       smoothing: value,
     });
   }
@@ -176,7 +185,7 @@ function OpNodeSettings({ id }: { id: NodeId }) {
         newOperation = Operation.Intersect;
         break;
     }
-    csgTree.updateOperationNodeProperties(id, {
+    csgTree.updateOperationNodeProperties(node, {
       op: newOperation,
     });
   }
@@ -190,7 +199,7 @@ function OpNodeSettings({ id }: { id: NodeId }) {
           step={0.05}
           type="number"
           onChange={onChange}
-          value={node.smoothing.toFixed(2)}
+          value={node.data.get("smoothing").toFixed(2)}
         />
       </div>
       <div className="settings-row">
@@ -198,7 +207,7 @@ function OpNodeSettings({ id }: { id: NodeId }) {
         <select
           onChange={onChangeOperation}
           ref={operationInputRef}
-          value={node.op}
+          value={node.data.get("op")}
         >
           <option value="0">Union</option>
           <option value="1">Difference</option>

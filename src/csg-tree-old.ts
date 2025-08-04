@@ -1,15 +1,9 @@
-import {
-  Loro,
-  LoroTree,
-  LoroTreeNode,
-  LoroMap,
-  LoroDoc,
-  TreeID,
-} from "loro-crdt";
-
 import { mat4, vec3 } from "gl-matrix";
 import { updateTreeBuffer } from "./main";
 import { hasChanges } from "./has-changes";
+
+// Using a type alias for the ID for clarity
+export type NodeId = string;
 
 export enum Operation {
   Union = 0, // Assign numerical values for shader
@@ -23,9 +17,15 @@ type OperationType =
   | Operation.Intersect
   | Operation.Difference;
 
-type OperationParams = {};
+type OperationParams = {
+  op: OperationType; // Use the numerical type
+  smoothing: number;
+};
 
-type LeafParams = {};
+type LeafParams = {
+  transform: mat4;
+  scale: number; // For now, assuming spheres, where scale is the radius
+};
 
 // --- AABB Definition ---
 type AABB = {
@@ -33,43 +33,32 @@ type AABB = {
   max: vec3; // [x_max, y_max, z_max]
 };
 
-type BaseNode = {
-  aabb: AABB;
-};
+// --- Node Definitions ---
+
+interface BaseNode {
+  id: NodeId;
+  name?: string; // Optional name for easier debugging/identification
+  parent?: NodeId; // Reference to parent ID
+  aabb: AABB; // All nodes will now have an AABB
+}
 
 // Operation nodes can have children
-type OperationNode = BaseNode & {
+interface OperationNode extends BaseNode, OperationParams {
   type: "operation"; // For shader: 0
-  name: string;
-  op: OperationType; // Use the numerical type
-  smoothing: number;
-};
+  children: NodeId[]; // Children will be referenced by their IDs
+}
 
 // Leaf nodes cannot have children
-type LeafNode = BaseNode & {
+interface LeafNode extends BaseNode, LeafParams {
   type: "leaf"; // For shader: 1
-  name: string;
-  transform: mat4;
-  scale: number; // For now, assuming spheres, where scale is the radius
   children?: never; // Explicitly disallow children for leaf nodes
-};
+}
 
 // Discriminated union for all possible node types
-export type CSGNode = LeafNode | OperationNode;
-
-export type TreeNode = LoroTreeNode<CSGNode>;
-
-export type OperationTreeNode = LoroTreeNode<OperationNode>;
-export type LeafTreeNode = LoroTreeNode<LeafNode>;
-
-type NormalizedTreeNode = CSGNode & {
-  id?: TreeID;
-  parent?: TreeID;
-  children?: TreeID[];
-};
+export type CSGNode = OperationNode | LeafNode;
 
 // --- Flattened Node Definition ---
-type FlattenedNode = CSGNode & {
+type FlattenedNode = (OperationNode | LeafNode) & {
   child1: number;
   child2: number;
   parentIndex: number;
@@ -109,190 +98,244 @@ const AABB_UTILITIES = {
 };
 
 export class CSGTree {
-  doc: LoroDoc;
-  tree: LoroTree;
-  root: LoroTreeNode;
+  private nodes: { [key: NodeId]: CSGNode };
+  public rootId: NodeId | null;
+  private nextId: number;
+
   constructor() {
-    this.doc = new LoroDoc();
-    this.tree = this.doc.getTree("csg-tree");
-    this.root = this.addOperationNode({
-      op: Operation.Union,
-      name: "root",
-      smoothing: 0,
-    });
+    this.nodes = {};
+    this.rootId = null;
+    this.nextId = 0;
   }
 
+  private generateId(): NodeId {
+    /* ... same ... */ return `node-${this.nextId++}`;
+  }
   addOperationNode(
-    params: Omit<OperationNode, "aabb" | "type">,
-    parent?: LoroTreeNode,
-  ): LoroTreeNode<OperationNode> {
+    params: Omit<OperationParams, "aabb"> & { name?: string },
+    parentId?: NodeId,
+  ): OperationNode {
     /* ... same ... */
     const newNode: OperationNode = {
+      id: this.generateId(),
       type: "operation",
+      children: [],
       aabb: AABB_UTILITIES.create(),
       ...params,
     };
+    this.nodes[newNode.id] = newNode;
 
-    const nodeParent = parent ?? this.root;
+    if (parentId) {
+      this.addChild(parentId, newNode.id);
+    } else if (!this.rootId) {
+      this.rootId = newNode.id;
+    }
 
-    const node = nodeParent.createNode();
-    Object.entries(newNode).forEach(([key, value]) => {
-      node.data.set(key, value);
-    });
-
-    this.updateNodeAABB(node as TreeNode);
-    return node as LoroTreeNode<OperationNode>;
+    this.updateNodeAABB(newNode.id);
+    return newNode;
   }
 
   addLeafNode(
-    params: Omit<LeafNode, "aabb" | "type">,
-    parent: LoroTreeNode,
-  ): LoroTreeNode<LeafNode> {
+    params: Omit<LeafParams, "aabb"> & { name?: string },
+    parentId: NodeId,
+  ): LeafNode {
     /* ... same ... */
     const initialAABB = AABB_UTILITIES.calculateSphereAABB(
       params.transform,
       params.scale,
     );
     const newNode: LeafNode = {
+      id: this.generateId(),
       type: "leaf",
       aabb: initialAABB,
       ...params,
     };
-    const node = parent.createNode();
-    Object.entries(newNode).forEach(([key, value]) => {
-      node.data.set(key, value);
-    });
+    this.nodes[newNode.id] = newNode;
+    this.addChild(parentId, newNode.id);
 
-    this.updateNodeAABB(node as TreeNode);
-    return node as LoroTreeNode<LeafNode>;
+    this.updateNodeAABB(newNode.id);
+    return newNode;
   }
-  removeNode(node: TreeNode): void {
-    const parent = node.parent();
-    this.tree.delete(node.id);
+  private addChild(parentId: NodeId, childId: NodeId): void {
+    /* ... same ... */
+    const parentNode = this.nodes[parentId];
+    const childNode = this.nodes[childId];
 
-    if (parent) {
-      this.updateNodeAABB(parent);
+    if (!parentNode) {
+      console.warn(
+        `Parent node with ID ${parentId} not found. Child ${childId} not added.`,
+      );
+      delete this.nodes[childId];
+      return;
     }
+    if (!childNode) {
+      console.warn(`Child node with ID ${childId} not found.`);
+      return;
+    }
+    if (parentNode.type === "leaf") {
+      console.error(`Cannot add child to a leaf node (ID: ${parentId}).`);
+      delete this.nodes[childId];
+      return;
+    }
+
+    if (!parentNode.children.includes(childId)) {
+      parentNode.children.push(childId);
+    }
+    childNode.parent = parentId;
   }
-  private updateNodeAABB(node: TreeNode): void {
+  removeNode(nodeId: NodeId): void {
+    /* ... same ... */
+    const nodeToRemove = this.nodes[nodeId];
+    if (!nodeToRemove) {
+      console.warn(`Node with ID ${nodeId} not found.`);
+      return;
+    }
+
+    const parentId = nodeToRemove.parent;
+
+    if (nodeToRemove.type === "operation") {
+      [...nodeToRemove.children].forEach((childId) => this.removeNode(childId));
+    }
+
+    if (parentId) {
+      const parentNode = this.nodes[parentId];
+      if (parentNode && parentNode.type === "operation") {
+        parentNode.children = parentNode.children.filter((id) => id !== nodeId);
+      }
+    }
+
+    delete this.nodes[nodeId];
+
+    if (this.rootId === nodeId) {
+      this.rootId = null;
+    }
+
+    if (parentId) {
+      this.updateNodeAABB(parentId);
+    }
+    console.log(`Node ${nodeId} and its descendants removed.`);
+  }
+  private updateNodeAABB(nodeId: NodeId): void {
+    /* ... same ... */
+    const node = this.nodes[nodeId];
+    if (!node) {
+      return;
+    }
+
     let newAABB: AABB;
 
-    // TODO: Parse?
-
-    if (node.data.get("type") === "leaf") {
-      const nodeData = node.data as LoroMap<LeafNode>;
-      newAABB = AABB_UTILITIES.calculateSphereAABB(
-        nodeData.get("transform"),
-        nodeData.get("scale"),
-      );
+    if (node.type === "leaf") {
+      newAABB = AABB_UTILITIES.calculateSphereAABB(node.transform, node.scale);
     } else {
-      const nodeData = node.data as LoroMap<OperationNode>;
       newAABB = AABB_UTILITIES.create();
 
-      for (let child of node.children() ?? []) {
+      for (let child_id of node.children) {
+        const child = this.getNode(child_id);
         if (!child) throw new Error("child not found");
-        const childData = child.data as unknown as CSGNode;
-        AABB_UTILITIES.expandByAABB(newAABB, childData.aabb);
+        AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
       }
-      AABB_UTILITIES.expandByScalar(newAABB, nodeData.get("smoothing") * 4);
+      AABB_UTILITIES.expandByScalar(newAABB, node.smoothing * 4);
     }
 
-    node.data.set("aabb", newAABB);
+    node.aabb = newAABB;
 
-    const parent = node.parent();
-    if (parent) {
-      this.updateNodeAABB(parent);
+    if (node.parent) {
+      this.updateNodeAABB(node.parent);
     } else {
       // root
       hasChanges.value = true;
     }
   }
   updateLeafNodeProperties(
-    leafNode: TreeNode,
+    leafId: NodeId,
     newProps: Partial<LeafParams>,
   ): void {
-    const leafNodeData = leafNode.data;
-    if (!leafNodeData || leafNodeData.get("type") !== "leaf") {
+    /* ... same ... */
+    const leafNode = this.nodes[leafId];
+    if (!leafNode || leafNode.type !== "leaf") {
+      console.warn(`Node ${leafId} not found or not a leaf node.`);
       return;
     }
 
     Object.assign(leafNode, newProps);
-    this.updateNodeAABB(leafNode);
+    this.updateNodeAABB(leafId);
   }
 
   updateOperationNodeProperties(
-    opNode: LoroTreeNode, // TODO: type guard so this can only be op node
+    opId: NodeId,
     newProps: Partial<OperationParams>,
   ): void {
-    Object.entries(newProps).forEach(([key, value]) => {
-      opNode.data.set(key, value);
-    });
-    this.updateNodeAABB(opNode as LoroTreeNode<OperationNode>);
+    /* ... same ... */
+    const opNode = this.nodes[opId];
+    if (!opNode || opNode.type !== "operation") {
+      console.warn(`Node ${opId} not found or not a operation node.`);
+      return;
+    }
+
+    Object.assign(opNode, newProps);
+    this.updateNodeAABB(opId);
   }
 
-  getRoot(): LoroTreeNode<OperationNode> {
-    return this.root as LoroTreeNode<OperationNode>;
+  getNode(id: NodeId): CSGNode | undefined {
+    return this.nodes[id];
   }
-
-  getNode(id: TreeID) {
-    return this.tree.getNodeByID(id) as TreeNode;
+  getRoot(): CSGNode | undefined {
+    return this.rootId ? this.nodes[this.rootId] : undefined;
   }
-
   traverse(
-    callback: (node: TreeNode, depth: number) => void,
-    startTreeNode?: TreeNode,
+    callback: (node: CSGNode, depth: number) => void,
+    startNodeId?: NodeId,
     currentDepth: number = 0,
   ): void {
     /* ... same ... */
-    const startNode = startTreeNode ?? this.getRoot();
+    const startNode = startNodeId ? this.nodes[startNodeId] : this.getRoot();
     if (!startNode) return;
 
     callback(startNode, currentDepth);
 
-    if (startNode.data.get("type") === "operation") {
-      for (const childId of startNode.children() ?? []) {
+    if (startNode.type === "operation") {
+      for (const childId of startNode.children) {
         this.traverse(callback, childId, currentDepth + 1);
       }
     }
   }
 
   private getNormalizedTree(): {
-    nodes: Map<TreeID, NormalizedTreeNode>;
-    rootId: TreeID | null;
+    nodes: Map<NodeId, CSGNode>;
+    rootId: NodeId | null;
   } {
-    const normalizedNodes = new Map<TreeID, NormalizedTreeNode>();
+    if (!this.rootId) {
+      return { nodes: new Map(), rootId: null };
+    }
+
+    const normalizedNodes = new Map<NodeId, CSGNode>();
     let nextId = 0;
-    const generateNormalizedId = (): TreeID => `999@${nextId++}`;
+    const generateNormalizedId = () => `norm-${nextId++}`;
 
     const buildNormalizedTree = (
-      originalNodeId: TreeID,
-      newParentId?: TreeID,
-    ): LoroTreeNode["id"] => {
-      const originalNode = this.tree.getNodeByID(originalNodeId) as TreeNode;
-      const newNode: NormalizedTreeNode = structuredClone(
-        originalNode.data.toJSON(),
-      );
-      newNode.id = originalNode.id;
+      originalNodeId: NodeId,
+      newParentId?: NodeId,
+    ): NodeId => {
+      const originalNode = this.nodes[originalNodeId]!;
+      const newNode: CSGNode = structuredClone(originalNode);
+      newNode.id = generateNormalizedId();
       if (newParentId) {
         newNode.parent = newParentId;
       }
       normalizedNodes.set(newNode.id, newNode);
 
-      if (
-        newNode.type === "operation" &&
-        originalNode.data.get("type") === "operation"
-      ) {
-        newNode.children = (originalNode.children() ?? []).map((child) =>
-          buildNormalizedTree(child.id, newNode.id),
+      if (newNode.type === "operation" && originalNode.type === "operation") {
+        newNode.children = originalNode.children.map((childId) =>
+          buildNormalizedTree(childId, newNode.id),
         );
 
         if (newNode.children.length > 2) {
           let currentChildren = [...newNode.children];
           while (currentChildren.length > 2) {
-            const newChildrenOfThisLevel: TreeID[] = [];
+            const newChildrenOfThisLevel = [];
             for (let i = 0; i < currentChildren.length; i += 2) {
               if (i + 1 < currentChildren.length) {
-                const intermediateOp: NormalizedTreeNode = {
+                const intermediateOp: OperationNode = {
                   id: generateNormalizedId(),
                   type: "operation",
                   op: newNode.op,
@@ -302,12 +345,12 @@ export class CSGTree {
                   parent: newNode.id,
                   aabb: AABB_UTILITIES.create(),
                 };
-                normalizedNodes.set(intermediateOp.id!, intermediateOp);
+                normalizedNodes.set(intermediateOp.id, intermediateOp);
                 const child1 = normalizedNodes.get(currentChildren[i])!;
-                child1.parent = intermediateOp.id!;
+                child1.parent = intermediateOp.id;
                 const child2 = normalizedNodes.get(currentChildren[i + 1])!;
-                child2.parent = intermediateOp.id!;
-                newChildrenOfThisLevel.push(intermediateOp.id!);
+                child2.parent = intermediateOp.id;
+                newChildrenOfThisLevel.push(intermediateOp.id);
               } else {
                 newChildrenOfThisLevel.push(currentChildren[i]);
               }
@@ -320,15 +363,15 @@ export class CSGTree {
       return newNode.id;
     };
 
-    const newRootId = buildNormalizedTree(this.root.id);
+    const newRootId = buildNormalizedTree(this.rootId);
 
-    const recalculateAABBs = (rootId: TreeID) => {
-      const postOrder: TreeID[] = [];
-      const buildPostOrder = (nodeId: TreeID) => {
+    const recalculateAABBs = (rootId: NodeId) => {
+      const postOrder: NodeId[] = [];
+      const buildPostOrder = (nodeId: NodeId) => {
         const node = normalizedNodes.get(nodeId);
         if (!node) return;
         if (node.type === "operation") {
-          for (const childId of node.children ?? []) {
+          for (const childId of node.children) {
             buildPostOrder(childId);
           }
         }
@@ -336,11 +379,11 @@ export class CSGTree {
       };
       buildPostOrder(rootId);
 
-      function getMaxSmoothing(nodeId: TreeID) {
+      function getMaxSmoothing(nodeId: NodeId) {
         const node = normalizedNodes.get(nodeId);
         if (!node || node.type === "leaf") return 0;
         let max = node?.smoothing;
-        for (let child of node.children ?? []) {
+        for (let child of node.children) {
           max = Math.max(getMaxSmoothing(child), max);
         }
         return max;
@@ -356,7 +399,7 @@ export class CSGTree {
           );
         } else {
           newAABB = AABB_UTILITIES.create();
-          for (const childId of node.children ?? []) {
+          for (const childId of node.children) {
             const child = normalizedNodes.get(childId)!;
             AABB_UTILITIES.expandByAABB(newAABB, child.aabb);
           }
@@ -379,10 +422,10 @@ export class CSGTree {
       return [];
     }
 
-    const nodeIndexMap = new Map<TreeID, number>();
-    const traversalOrder: NormalizedTreeNode[] = [];
+    const nodeIndexMap = new Map<NodeId, number>();
+    const traversalOrder: CSGNode[] = [];
 
-    const dfs = (nodeId: TreeID) => {
+    const dfs = (nodeId: NodeId) => {
       const node = normalizedNodes.get(nodeId);
       if (!node) return;
 
@@ -390,7 +433,7 @@ export class CSGTree {
       traversalOrder.push(node);
 
       if (node.type === "operation") {
-        for (const childId of node.children ?? []) {
+        for (const childId of node.children) {
           dfs(childId);
         }
       }
@@ -412,10 +455,10 @@ export class CSGTree {
 
         let child1 = -1;
         let child2 = -1;
-        if (node.type === "operation" && (node.children ?? []).length > 0) {
-          child1 = nodeIndexMap.get((node.children ?? [])[0]) ?? -1;
-          if ((node.children ?? []).length > 1) {
-            child2 = nodeIndexMap.get((node.children ?? [])[1]) ?? -1;
+        if (node.type === "operation" && node.children.length > 0) {
+          child1 = nodeIndexMap.get(node.children[0]) ?? -1;
+          if (node.children.length > 1) {
+            child2 = nodeIndexMap.get(node.children[1]) ?? -1;
           }
         }
 
@@ -518,43 +561,39 @@ export class CSGTree {
   }
 }
 
-export const isOperationNode = (node: TreeNode): node is OperationTreeNode =>
-  node.data.get("type") === "operation";
-export const isLeafNode = (node: TreeNode): node is LeafTreeNode =>
-  node.data.get("type") === "leaf";
-
 export function generateRandomBlobTree(
   numLeaves: number,
   numChildrenPerNode: number,
 ): CSGTree {
-  const csgTree = new CSGTree();
+  const sceneGraph = new CSGTree();
   if (numLeaves <= 0) {
-    return csgTree;
+    return sceneGraph;
   }
 
-  let parentCandidates: LoroTreeNode<OperationNode>[] = [csgTree.getRoot()];
+  const root = sceneGraph.addOperationNode({
+    name: "Root",
+    op: Operation.Union,
+    smoothing: 0.2,
+  });
+
+  let parentCandidates: OperationNode[] = [root];
   let leavesCreated = 0;
-  let opNodesCreated = 0;
 
   while (leavesCreated < numLeaves) {
     if (parentCandidates.length === 0) {
       // This case occurs when all available operation nodes are full.
       // We'll create a new operation node and attach it to a random existing operation node.
-      const allOpNodes: TreeNode[] = [];
-      csgTree.traverse((node) => {
-        if (node.data.get("type") === "operation") {
-          allOpNodes.push(node);
+      const allOpNodes: OperationNode[] = [];
+      sceneGraph.traverse((node) => {
+        if (node.type === "operation") {
+          allOpNodes.push(node as OperationNode);
         }
       });
       const grandParent =
         allOpNodes[Math.floor(Math.random() * allOpNodes.length)];
-      const newParent = csgTree.addOperationNode(
-        {
-          op: Operation.Union,
-          smoothing: 0.1,
-          name: `opNode ${opNodesCreated++}`,
-        },
-        grandParent,
+      const newParent = sceneGraph.addOperationNode(
+        { op: Operation.Union, smoothing: 0.1 },
+        grandParent.id,
       );
       parentCandidates.push(newParent);
     }
@@ -572,20 +611,12 @@ export function generateRandomBlobTree(
 
     const parent_bbox_size = parent_is_empty
       ? vec3.fromValues(2, 2, 2)
-      : vec3.sub(
-          vec3.create(),
-          parent.data.get("aabb").max,
-          parent.data.get("aabb").min,
-        );
+      : vec3.sub(vec3.create(), parent.aabb.max, parent.aabb.min);
     const parent_bbox_center = parent_is_empty
       ? vec3.fromValues(1, 1, 1)
       : vec3.scale(
           vec3.create(),
-          vec3.add(
-            vec3.create(),
-            parent.data.get("aabb").max,
-            parent.data.get("aabb").min,
-          ),
+          vec3.add(vec3.create(), parent.aabb.max, parent.aabb.min),
           0.5,
         );
 
@@ -608,19 +639,18 @@ export function generateRandomBlobTree(
           0.5 +
         0.1;
       const transform = mat4.fromTranslation(mat4.create(), position);
-      csgTree.addLeafNode(
+      sceneGraph.addLeafNode(
         { transform, scale, name: `Leaf-${leavesCreated}` },
-        parent,
+        parent.id,
       );
       leavesCreated++;
     } else {
-      const newOp = csgTree.addOperationNode(
+      const newOp = sceneGraph.addOperationNode(
         {
-          name: `op_${opNodesCreated++}`,
           op: Operation.Difference, //Math.random() > 0.5 ? Operation.Difference : Operation.Union,
           smoothing: Math.random() * 0.25,
         },
-        parent,
+        parent.id,
       );
       parentCandidates.push(newOp);
     }
@@ -631,7 +661,7 @@ export function generateRandomBlobTree(
     );
   }
 
-  return csgTree;
+  return sceneGraph;
 }
 
 export const csgTree = generateRandomBlobTree(15, 5);

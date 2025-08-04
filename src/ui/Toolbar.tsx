@@ -52,7 +52,7 @@ function usePlaceSphereTool() {
           scale: 1,
           name: "placed node!",
         },
-        csgTree.rootId!,
+        csgTree.getRoot(),
       );
     }
     hasChanges.value = true;
