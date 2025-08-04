@@ -12,7 +12,6 @@ export const activeTool = signal<Tool | null>(null);
 function usePlaceSphereTool() {
   useSignalEffect(() => {
     if (activeTool.value !== "PlaceSphere") return;
-    console.log("placeing!");
     async function placeSphere(e: MouseEvent) {
       const x = e.clientX;
       const y = e.clientY;
@@ -34,7 +33,11 @@ function usePlaceSphereTool() {
       );
       const dir = vec3.normalize(
         vec3.create(),
-        vec3.fromValues(transformedDir[0], transformedDir[1], transformedDir[2]),
+        vec3.fromValues(
+          transformedDir[0],
+          transformedDir[1],
+          transformedDir[2],
+        ),
       );
 
       const pos = vec3.add(
@@ -43,7 +46,6 @@ function usePlaceSphereTool() {
         vec3.scale(vec3.create(), dir, depth),
       );
 
-      console.log(dir, pos, depth);
       csgTree.addLeafNode(
         {
           transform: mat4.fromTranslation(mat4.create(), pos),
@@ -67,8 +69,8 @@ export function Toolbar() {
       <hr></hr>
       <button
         onClick={() => {
-          console.log("click");
-          activeTool.value = "PlaceSphere";
+          activeTool.value =
+            activeTool.peek() === "PlaceSphere" ? null : "PlaceSphere";
         }}
       >
         place sphere {activeTool.value === "PlaceSphere" ? "!" : ""}
