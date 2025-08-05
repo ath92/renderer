@@ -133,7 +133,7 @@ export class CSGTree {
       ...params,
     };
 
-    const nodeParent = parent ?? this.root;
+    const nodeParent = parent ?? this.root ?? this.tree;
 
     const node = nodeParent.createNode();
     Object.entries(newNode).forEach(([key, value]) => {
@@ -153,15 +153,21 @@ export class CSGTree {
       params.transform,
       params.scale,
     );
+
+    console.log("transform", params.transform);
+
     const newNode: LeafNode = {
       type: "leaf",
       aabb: initialAABB,
       ...params,
+      transform: [...params.transform] as mat4,
     };
     const node = parent.createNode();
     Object.entries(newNode).forEach(([key, value]) => {
       node.data.set(key, value);
     });
+
+    console.log(node.data.get("transform"));
 
     this.updateNodeAABB(node as TreeNode);
     return node as LoroTreeNode<LeafNode>;
@@ -191,8 +197,8 @@ export class CSGTree {
 
       for (let child of node.children() ?? []) {
         if (!child) throw new Error("child not found");
-        const childData = child.data as unknown as CSGNode;
-        AABB_UTILITIES.expandByAABB(newAABB, childData.aabb);
+        const childData = child.data;
+        AABB_UTILITIES.expandByAABB(newAABB, childData.get("aabb"));
       }
       AABB_UTILITIES.expandByScalar(newAABB, nodeData.get("smoothing") * 4);
     }
@@ -269,9 +275,11 @@ export class CSGTree {
       newParentId?: TreeID,
     ): LoroTreeNode["id"] => {
       const originalNode = this.tree.getNodeByID(originalNodeId) as TreeNode;
+
       const newNode: NormalizedTreeNode = structuredClone(
         originalNode.data.toJSON(),
       );
+
       newNode.id = originalNode.id;
       if (newParentId) {
         newNode.parent = newParentId;
@@ -375,6 +383,8 @@ export class CSGTree {
     const { nodes: normalizedNodes, rootId: normalizedRootId } =
       this.getNormalizedTree();
 
+    console.log("normalized", normalizedNodes);
+
     if (!normalizedRootId) {
       return [];
     }
@@ -397,6 +407,8 @@ export class CSGTree {
     };
 
     dfs(normalizedRootId);
+
+    console.log("tra", traversalOrder);
 
     const flattenedNodes: FlattenedNode[] = traversalOrder.map(
       (node, index) => {
@@ -428,6 +440,8 @@ export class CSGTree {
         };
       },
     );
+
+    console.log("flattened", flattenedNodes);
 
     return flattenedNodes;
   }
@@ -482,6 +496,8 @@ export class CSGTree {
     dataRevised.set(transformMatrix, currentOffset);
     currentOffset += 16; // Advance offset by 16 floats for the mat4
 
+    console.log("revised", dataRevised);
+
     if (currentOffset !== nodeSizeInFloats_Revised) {
       console.error(
         `Serialization error: Expected ${nodeSizeInFloats_Revised} floats, got ${currentOffset}`,
@@ -513,6 +529,8 @@ export class CSGTree {
       const serializedNodeData = CSGTree.serializeFlattenedNode(node);
       buffer.set(serializedNodeData, index * nodeStrideInFloats);
     });
+
+    console.log(buffer, "buf");
 
     return buffer;
   }
@@ -634,6 +652,6 @@ export function generateRandomBlobTree(
   return csgTree;
 }
 
-export const csgTree = generateRandomBlobTree(15, 5);
+export const csgTree = generateRandomBlobTree(3, 5);
 
-console.log(csgTree);
+console.log("json", csgTree.tree.toJSON());

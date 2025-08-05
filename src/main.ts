@@ -95,6 +95,8 @@ export function updateTreeBuffer(flattenedTree: Float32Array) {
   if (!device || !treeBuffer || !uniformBuffer || !fractalBindGroupLayout)
     return;
 
+  console.log("update tree buffer");
+
   if (flattenedTree.byteLength > treeBuffer.size) {
     console.log(
       `Resizing tree buffer from ${treeBuffer.size} to ${flattenedTree.byteLength}`,
