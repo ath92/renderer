@@ -1,14 +1,5 @@
-import { effect, signal } from "@preact/signals-react";
+import { signal } from "@preact/signals-react";
 import { csgTree } from "../../csg-tree";
-import { hasChanges } from "../../has-changes";
-
-export const csgChangeCounter = signal(0);
-
-effect(() => {
-  if (hasChanges.value) {
-    csgChangeCounter.value = csgChangeCounter.peek() + 1;
-  }
-});
 
 const initialCollapsed = new Set();
 csgTree.traverse((node) => {

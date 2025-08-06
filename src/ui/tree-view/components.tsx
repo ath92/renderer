@@ -1,13 +1,13 @@
-import { collapsedNodes, csgChangeCounter, toggleNode } from "./state";
+import { collapsedNodes, toggleNode } from "./state";
 import "./style.css";
 import {
-  CSGNode,
   Operation,
   csgTree,
   TreeNode,
   OperationTreeNode,
   isOperationNode,
   isLeafNode,
+  csgChangeCounter,
 } from "../../csg-tree";
 import { selectedNode } from "../../selection";
 import { MouseEvent, useRef } from "react";
@@ -77,16 +77,15 @@ function TreeNode({ node }: { node: TreeNode }) {
 }
 
 export function TreeView() {
-  csgChangeCounter.value;
   const rootNode = csgTree.getRoot();
-  console.log("re-render tree!");
+  console.log("re-render tree!", csgChangeCounter.value);
 
   if (!rootNode) {
     return <div>No data</div>;
   }
 
   return (
-    <div id="tree-view" data-bla={hasChanges.value}>
+    <div id="tree-view">
       <TreeNode node={rootNode} />
     </div>
   );

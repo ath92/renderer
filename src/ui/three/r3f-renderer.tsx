@@ -1,26 +1,35 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { TransformControls } from "@react-three/drei";
-import { csgTree, CSGNode } from "../../csg-tree";
+import {
+  csgTree,
+  TreeNode,
+  isLeafNode,
+  csgChangeCounter,
+} from "../../csg-tree";
 import { selectedNode } from "../../selection";
-import { useSignalEffect, useComputed } from "@preact/signals-react";
+import { useSignalEffect } from "@preact/signals-react";
 import * as THREE from "three";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { hasChanges } from "../../has-changes";
 import playerControls from "../../player-controls";
 
-function Sphere({ node }: { node: CSGNode }) {
-  if (node.type !== "leaf") return null;
+function Sphere({ node }: { node: TreeNode }) {
+  if (!isLeafNode(node)) return null;
 
   const ref = useRef<THREE.Mesh>(null!);
 
   useSignalEffect(() => {
     if (ref.current) {
       ref.current.position.set(
-        node.transform[12],
-        node.transform[13],
-        node.transform[14],
+        node.data.get("transform")[12],
+        node.data.get("transform")[13],
+        node.data.get("transform")[14],
       );
-      ref.current.scale.set(node.scale, node.scale, node.scale);
+      ref.current.scale.set(
+        node.data.get("scale"),
+        node.data.get("scale"),
+        node.data.get("scale"),
+      );
     }
   });
 
@@ -49,15 +58,19 @@ function CameraUpdater() {
   return null;
 }
 
-function SpheresScene() {
-  const nodes = useComputed(() => {
-    hasChanges.value; // subscribe to hasChanges
-    const newNodes: CSGNode[] = [];
+function SpheresScene({ counter }: { counter: number }) {
+  console.log("re-render!", counter);
+  const nodes = useMemo(() => {
+    console.log("hahaha", csgChangeCounter.value, counter);
+    const newNodes: TreeNode[] = [];
     csgTree.traverse((node) => {
       newNodes.push(node);
     });
+
     return newNodes;
-  });
+  }, [counter]);
+
+  console.log("re-render spheres", nodes.length);
 
   const transformControlsRef = useRef<any>(null);
   const { scene } = useThree();
@@ -75,7 +88,7 @@ function SpheresScene() {
       <CameraUpdater />
       <ambientLight />
       <pointLight position={[10, 10, 10]} />
-      {nodes.value.map((node) => (
+      {nodes.map((node) => (
         <Sphere key={node.id} node={node} />
       ))}
 
@@ -87,7 +100,9 @@ function SpheresScene() {
               playerControls.enabled = !transformControlsRef.current.dragging;
               if (transformControlsRef.current.object) {
                 const object = transformControlsRef.current.object;
-                csgTree.updateLeafNodeProperties(object.name, {
+                const node = csgTree.getNode(object.name);
+
+                csgTree.updateLeafNodeProperties(node, {
                   transform: object.matrixWorld.toArray(),
                 });
                 hasChanges.value = transformControlsRef.current.dragging;
@@ -113,7 +128,7 @@ function SpheresScene() {
 export function R3fRenderer() {
   return (
     <Canvas camera={{ fov: 53.13 }}>
-      <SpheresScene />
+      <SpheresScene counter={csgChangeCounter.value} />
     </Canvas>
   );
 }

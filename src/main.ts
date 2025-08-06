@@ -5,7 +5,7 @@ import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
 
-import { csgTree } from "./csg-tree";
+import { csgChangeCounter, csgTree } from "./csg-tree";
 //@ts-ignore
 import PoissonDisk from "fast-2d-poisson-disk-sampling";
 import { hasChanges } from "./has-changes";
@@ -388,11 +388,17 @@ async function main() {
   let from: GPUTexture, fromDepth: GPUTexture;
   let start = Date.now();
 
+  let change_counter = csgChangeCounter.peek();
   async function loop() {
     if (depthReadbackPromise) await depthReadbackPromise;
     const state = playerControls.state;
-    const has_changes = hasChanges.value;
-    if (has_changes) updateTreeBuffer(csgTree.serializeTreeForWebGPU());
+    const latest_counter = csgChangeCounter.peek();
+    const csg_tree_has_changes = change_counter !== latest_counter;
+    const has_changes = hasChanges.value || csg_tree_has_changes;
+    change_counter = latest_counter;
+    if (csg_tree_has_changes) {
+      updateTreeBuffer(csgTree.serializeTreeForWebGPU());
+    }
     hasChanges.value = false;
     const { fbo, shape, offsets } = precisionFbos[performance];
     const [source, target, sourceDepth, targetDepth] = pingpong(frame);
@@ -400,7 +406,6 @@ async function main() {
     if (!fromDepth) fromDepth = sourceDepth;
     if (has_changes) step = 0;
 
-    let readbackRequestedThisFrame = requestDepthReadback;
     if (requestDepthReadback) requestDepthReadback = false;
 
     if (step < offsets.length) {

@@ -1,15 +1,9 @@
-import {
-  Loro,
-  LoroTree,
-  LoroTreeNode,
-  LoroMap,
-  LoroDoc,
-  TreeID,
-} from "loro-crdt";
+import { LoroTree, LoroTreeNode, LoroMap, LoroDoc, TreeID } from "loro-crdt";
 
 import { mat4, vec3 } from "gl-matrix";
-import { updateTreeBuffer } from "./main";
-import { hasChanges } from "./has-changes";
+import { signal } from "@preact/signals-react";
+
+export const csgChangeCounter = signal(0);
 
 export enum Operation {
   Union = 0, // Assign numerical values for shader
@@ -118,7 +112,7 @@ export class CSGTree {
     this.root = this.addOperationNode({
       op: Operation.Union,
       name: "root",
-      smoothing: 0,
+      smoothing: 0.001,
     });
   }
 
@@ -154,8 +148,6 @@ export class CSGTree {
       params.scale,
     );
 
-    console.log("transform", params.transform);
-
     const newNode: LeafNode = {
       type: "leaf",
       aabb: initialAABB,
@@ -166,8 +158,6 @@ export class CSGTree {
     Object.entries(newNode).forEach(([key, value]) => {
       node.data.set(key, value);
     });
-
-    console.log(node.data.get("transform"));
 
     this.updateNodeAABB(node as TreeNode);
     return node as LoroTreeNode<LeafNode>;
@@ -210,19 +200,17 @@ export class CSGTree {
       this.updateNodeAABB(parent);
     } else {
       // root
-      hasChanges.value = true;
+      csgChangeCounter.value = csgChangeCounter.peek() + 1;
+      console.log("csg", csgChangeCounter.value);
     }
   }
   updateLeafNodeProperties(
     leafNode: TreeNode,
     newProps: Partial<LeafParams>,
   ): void {
-    const leafNodeData = leafNode.data;
-    if (!leafNodeData || leafNodeData.get("type") !== "leaf") {
-      return;
-    }
-
-    Object.assign(leafNode, newProps);
+    Object.entries(newProps).forEach(([key, value]) => {
+      leafNode.data.set(key as keyof CSGNode, value as CSGNode[keyof CSGNode]);
+    });
     this.updateNodeAABB(leafNode);
   }
 
@@ -383,8 +371,6 @@ export class CSGTree {
     const { nodes: normalizedNodes, rootId: normalizedRootId } =
       this.getNormalizedTree();
 
-    console.log("normalized", normalizedNodes);
-
     if (!normalizedRootId) {
       return [];
     }
@@ -407,8 +393,6 @@ export class CSGTree {
     };
 
     dfs(normalizedRootId);
-
-    console.log("tra", traversalOrder);
 
     const flattenedNodes: FlattenedNode[] = traversalOrder.map(
       (node, index) => {
@@ -440,8 +424,6 @@ export class CSGTree {
         };
       },
     );
-
-    console.log("flattened", flattenedNodes);
 
     return flattenedNodes;
   }
@@ -496,8 +478,6 @@ export class CSGTree {
     dataRevised.set(transformMatrix, currentOffset);
     currentOffset += 16; // Advance offset by 16 floats for the mat4
 
-    console.log("revised", dataRevised);
-
     if (currentOffset !== nodeSizeInFloats_Revised) {
       console.error(
         `Serialization error: Expected ${nodeSizeInFloats_Revised} floats, got ${currentOffset}`,
@@ -529,8 +509,6 @@ export class CSGTree {
       const serializedNodeData = CSGTree.serializeFlattenedNode(node);
       buffer.set(serializedNodeData, index * nodeStrideInFloats);
     });
-
-    console.log(buffer, "buf");
 
     return buffer;
   }
@@ -652,6 +630,4 @@ export function generateRandomBlobTree(
   return csgTree;
 }
 
-export const csgTree = generateRandomBlobTree(3, 5);
-
-console.log("json", csgTree.tree.toJSON());
+export const csgTree = generateRandomBlobTree(5, 5);

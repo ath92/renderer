@@ -8,6 +8,9 @@ export function App() {
   useSignals();
   return (
     <>
+      <div id="viewport">
+        <R3fRenderer />
+      </div>
       <div id="left-panel">
         <TreeView />
         <SelectedNodeSettings />
@@ -20,7 +23,4 @@ export function App() {
 export function initUI() {
   const root = createRoot(document.getElementById("ui-root")!);
   root.render(<App />);
-
-  const viewportRoot = createRoot(document.getElementById("viewport")!);
-  viewportRoot.render(<R3fRenderer />);
 }
