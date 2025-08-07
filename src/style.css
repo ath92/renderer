@@ -1,21 +1,54 @@
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: black;
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: black;
 }
 
 #app {
-  width: 100%;
-  height: 100%;
-  margin: 0 auto;
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+}
+
+#viewport {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
 }
 
 canvas {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+    width: 100% !important;
+    height: 100% !important;
+}
+
+#left-panel {
+    position: absolute;
+    box-sizing: border-box;
+    height: calc(100vh - 20px);
+    top: 10px;
+    left: 10px;
+    width: 300px;
+    background-color: rgba(60, 60, 60, 0.5);
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 5px;
+    z-index: 3;
+    overflow-y: auto;
+    font-family: sans-serif;
+    font-size: 12px;
+    color: white;
+}
+
+#viewport {
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
 }
