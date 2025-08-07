@@ -3,7 +3,7 @@ import "./style.css";
 import {
   Operation,
   csgTree,
-  TreeNode,
+  TreeNode as TreeNodeType,
   OperationTreeNode,
   isOperationNode,
   isLeafNode,
@@ -29,7 +29,7 @@ function selectNodeHandler(nodeId: TreeID) {
   };
 }
 
-function LeafNode({ node }: { node: TreeNode }) {
+function LeafNode({ node }: { node: TreeNodeType }) {
   return (
     <div
       className={`tree-node leaf-node ${selectedClass(node.id)}`}
@@ -68,7 +68,7 @@ function OperationNode({ node }: { node: OperationTreeNode }) {
   );
 }
 
-function TreeNode({ node }: { node: TreeNode }) {
+function TreeNode({ node }: { node: TreeNodeType }) {
   if (node.data.get("type") === "leaf") {
     return <LeafNode node={node} />;
   }
