@@ -68,11 +68,14 @@ export function syncSpheres() {
 var transform_controls: TransformControls;
 
 export function initThreeScene(canvas: HTMLCanvasElement) {
+  // Update player controls aspect ratio
+  playerControls.updateAspectRatio(canvas.width, canvas.height);
+  
   const camera = new THREE.PerspectiveCamera(
-    53.13,
-    canvas.width / canvas.height,
-    0.1,
-    1000,
+    playerControls.fov,
+    playerControls.aspectRatio,
+    playerControls.near,
+    playerControls.far,
   );
 
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
@@ -128,9 +131,29 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   function animate() {
     requestAnimationFrame(animate);
 
-    const { cameraPosition, cameraDirectionQuat } = playerControls.state;
-    camera.position.fromArray(cameraPosition);
-    camera.quaternion.fromArray(cameraDirectionQuat);
+    const state = playerControls.state;
+    
+    // Update camera projection parameters if they changed
+    if (camera.fov !== state.fov) {
+      camera.fov = state.fov;
+      camera.updateProjectionMatrix();
+    }
+    if (camera.aspect !== state.aspectRatio) {
+      camera.aspect = state.aspectRatio;
+      camera.updateProjectionMatrix();
+    }
+    if (camera.near !== state.near) {
+      camera.near = state.near;
+      camera.updateProjectionMatrix();
+    }
+    if (camera.far !== state.far) {
+      camera.far = state.far;
+      camera.updateProjectionMatrix();
+    }
+    
+    // Update camera position and rotation
+    camera.position.fromArray(state.cameraPosition);
+    camera.quaternion.fromArray(state.cameraDirectionQuat);
     camera.scale.z = -1;
 
     renderer.render(scene, camera);

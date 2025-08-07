@@ -30,6 +30,9 @@ const height = window.innerHeight - (window.innerHeight % 8);
 webgpuCanvas.width = width;
 webgpuCanvas.height = height;
 
+// Update player controls aspect ratio
+playerControls.updateAspectRatio(width, height);
+
 let frame = 0;
 let step = 0;
 let requestDepthReadback = false;
@@ -427,6 +430,7 @@ async function main() {
         0,
         state.scrollX,
         state.scrollY,
+        state.fov,
         0,
       ]);
       updateBuffer(device, uniformBuffer!, uniformValues);

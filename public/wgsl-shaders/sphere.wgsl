@@ -13,6 +13,7 @@ struct Uniforms {
     onlyDistance: u32, // bools are often u32 in WGSL uniforms
     scrollX: f32,
     scrollY: f32,
+    fov: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -21,8 +22,12 @@ struct Uniforms {
 fn getRay(fragCoord: vec4<f32>) -> vec3<f32> {
     let normalizedCoords = fragCoord.xy - vec2<f32>(0.5) + (u.offset / u.repeat);
     let pixel = (normalizedCoords - 0.5 * u.screenSize) / min(u.screenSize.x, u.screenSize.y);
-    // Assuming cameraDirection is a matrix that transforms from camera space to world space
-    return normalize((u.cameraDirection * vec4<f32>(pixel.x, pixel.y, 1.0, 0.0)).xyz);
+    
+    // Calculate focal length from FOV
+    let fovRadians = u.fov * 3.14159265359 / 180.0;
+    let focalLength = 1.0 / tan(fovRadians * 0.5);
+    
+    return (u.cameraDirection * normalize(vec4<f32>(pixel.x, pixel.y, focalLength, 0.0))).xyz;
 }
 
 // Distance function for a sphere

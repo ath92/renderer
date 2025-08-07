@@ -11,6 +11,7 @@ struct Uniforms {
     cameraDirection: mat4x4<f32>,
     scrollX: f32,
     scrollY: f32,
+    fov: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -29,7 +30,12 @@ fn rotmat_fn() -> mat3x3<f32> {
 fn getRay(fragCoord: vec4<f32>) -> vec3<f32> {
     let normalizedCoords = fragCoord.xy - vec2<f32>(0.5) + (u.offset / u.repeat);
     let pixel = (normalizedCoords - 0.5 * u.screenSize) / min(u.screenSize.x, u.screenSize.y);
-    return (u.cameraDirection * normalize(vec4<f32>(pixel.x, pixel.y, 1.0, 0.0))).xyz;
+    
+    // Calculate focal length from FOV
+    let fovRadians = u.fov * 3.14159265359 / 180.0;
+    let focalLength = 1.0 / tan(fovRadians * 0.5);
+    
+    return (u.cameraDirection * normalize(vec4<f32>(pixel.x, pixel.y, focalLength, 0.0))).xyz;
 }
 
 fn makeHoles(p: vec3<f32>, h: f32) -> f32 {
