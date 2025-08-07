@@ -76,6 +76,12 @@ class PlayerControls {
   isTouching: boolean = false;
   hasMovedSinceMousedown = false;
   enabled = true;
+  
+  // Camera projection parameters
+  fov: number = 53.13; // Field of view in degrees
+  near: number = 0.1;
+  far: number = 1000;
+  aspectRatio: number = window.innerWidth / window.innerHeight;
 
   constructor(
     acceleration = 0.005,
@@ -181,6 +187,10 @@ class PlayerControls {
     }
   };
 
+  updateAspectRatio(width: number, height: number) {
+    this.aspectRatio = width / height;
+  }
+
   time = performance.now();
 
   loop() {
@@ -235,6 +245,24 @@ class PlayerControls {
       cameraDirection,
       this.position,
     );
+    
+    // Create projection matrix
+    const fovRadians = (this.fov * Math.PI) / 180;
+    const projectionMatrix = mat4.perspective(
+      mat4.create(),
+      fovRadians,
+      this.aspectRatio,
+      this.near,
+      this.far
+    );
+    
+    // Combine view and projection matrices
+    const viewProjectionMatrix = mat4.multiply(
+      mat4.create(),
+      projectionMatrix,
+      mat4.invert(mat4.create(), cameraMatrix)
+    );
+    
     return {
       hasChanges: has_changes,
       scrollX: this.scrollX,
@@ -243,6 +271,12 @@ class PlayerControls {
       cameraDirection,
       cameraDirectionQuat: quat.clone(this.direction),
       cameraMatrix,
+      fov: this.fov,
+      aspectRatio: this.aspectRatio,
+      near: this.near,
+      far: this.far,
+      projectionMatrix,
+      viewProjectionMatrix,
     };
   }
 }
