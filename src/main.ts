@@ -152,7 +152,7 @@ async function main() {
 
   // Load shaders
   const passThroughVertCode = await (
-    await fetch("/src/wgsl-shaders/pass-through.wgsl")
+    await fetch("/wgsl-shaders/pass-through.wgsl")
   ).text();
   const passThroughVertModule = device.createShaderModule({
     label: "Pass Through Vertex Shader",
@@ -160,7 +160,7 @@ async function main() {
   });
 
   const fractalFragCode = await (
-    await fetch(`/src/wgsl-shaders/${fractal}.wgsl`)
+    await fetch(`/wgsl-shaders/${fractal}.wgsl`)
   ).text();
   const fractalFragModule = device.createShaderModule({
     label: "Fractal Fragment Shader",
@@ -168,7 +168,7 @@ async function main() {
   });
 
   const upsampleFragCode = await (
-    await fetch("/src/wgsl-shaders/upsample.wgsl")
+    await fetch("/wgsl-shaders/upsample.wgsl")
   ).text();
   const upsampleFragModule = device.createShaderModule({
     label: "Upsample Fragment Shader",
@@ -176,7 +176,7 @@ async function main() {
   });
 
   const blitFragCode = await (
-    await fetch("/src/wgsl-shaders/blit.wgsl")
+    await fetch("/wgsl-shaders/blit.wgsl")
   ).text();
   const blitFragModule = device.createShaderModule({
     label: "Blit Fragment Shader",
