@@ -11,7 +11,6 @@ import {
 } from "../../csg-tree";
 import { selectedNode } from "../../selection";
 import { MouseEvent, useRef } from "react";
-
 import { TreeID } from "loro-crdt";
 
 const OperationMap: Record<Operation, string> = {
