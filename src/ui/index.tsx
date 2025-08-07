@@ -36,7 +36,7 @@ export function App() {
       {/* Mobile toggle button */}
       <button 
         id="panel-toggle"
-        className="panel-toggle"
+        className={`panel-toggle ${isPanelOpen ? 'panel-open' : ''}`}
         onClick={() => setIsPanelOpen(!isPanelOpen)}
         aria-label={isPanelOpen ? "Close panel" : "Open panel"}
       >

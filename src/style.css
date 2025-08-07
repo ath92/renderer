@@ -39,8 +39,15 @@ canvas {
     padding: 12px;
     cursor: pointer;
     backdrop-filter: blur(10px);
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
     display: none; /* Hidden by default, shown on mobile */
+}
+
+/* Move button next to panel when open on mobile */
+@media (max-width: 768px) {
+    .panel-toggle.panel-open {
+        left: 300px; /* Position next to the 280px wide panel with some margin */
+    }
 }
 
 .panel-toggle:hover {
