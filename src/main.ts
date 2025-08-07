@@ -430,6 +430,7 @@ async function main() {
         0,
         state.scrollX,
         state.scrollY,
+        state.fov,
         0,
       ]);
       updateBuffer(device, uniformBuffer!, uniformValues);
