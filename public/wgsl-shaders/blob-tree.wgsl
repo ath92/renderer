@@ -13,6 +13,7 @@ struct Uniforms {
     onlyDistance: u32, // bools are often u32 in WGSL uniforms
     scrollX: f32,
     scrollY: f32,
+    fov: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

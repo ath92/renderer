@@ -14,7 +14,6 @@ struct Uniforms {
     scrollX: f32,
     scrollY: f32,
     fov: f32,
-    fov: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
