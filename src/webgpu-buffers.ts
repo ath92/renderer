@@ -10,5 +10,5 @@ export function createBuffer(device: GPUDevice, data: Float32Array, usage: GPUBu
 }
 
 export function updateBuffer(device: GPUDevice, buffer: GPUBuffer, data: Float32Array) {
-    device.queue.writeBuffer(buffer, 0, data);
+    device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
 }
