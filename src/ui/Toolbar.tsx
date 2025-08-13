@@ -2,7 +2,7 @@ import { signal, useSignalEffect } from "@preact/signals-react";
 import { depthReadback } from "../main";
 import { csgTree } from "../csg-tree";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import playerControls from "../player-controls";
+import threeControls from "../three-controls";
 import { hasChanges } from "../has-changes";
 
 export type Tool = "PlaceSphere";
@@ -29,7 +29,7 @@ function usePlaceSphereTool() {
       const transformedDir = vec4.transformMat4(
         vec4.create(),
         rayDirectionVec4,
-        playerControls.state.cameraDirection,
+        threeControls.state.cameraDirection,
       );
       const dir = vec3.normalize(
         vec3.create(),
@@ -42,7 +42,7 @@ function usePlaceSphereTool() {
 
       const pos = vec3.add(
         vec3.create(),
-        playerControls.state.cameraPosition,
+        threeControls.state.cameraPosition,
         vec3.scale(vec3.create(), dir, depth),
       );
 
