@@ -59,11 +59,6 @@ function Sphere({ node }: { node: TreeNode }) {
   );
 }
 
-function CameraUpdater() {
-  // Remove the custom camera updater since OrbitControls will handle camera positioning
-  return null;
-}
-
 function SpheresScene({ counter }: { counter: number }) {
   console.log("re-render!", counter);
   const nodes = useMemo(() => {
