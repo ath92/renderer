@@ -1,9 +1,10 @@
 import "./style.css";
 import { initUI } from "./ui/index";
-import playerControls from "./player-controls";
+import threeControls from "./three-controls";
 import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
+import * as THREE from "three";
 
 import { csgChangeCounter, csgTree } from "./csg-tree";
 //@ts-ignore
@@ -47,11 +48,8 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   ) {
     const newSearch = new URLSearchParams(location.search);
     newSearch.set("performance", e.key);
-    newSearch.set("position", playerControls.position.map((n) => n).join(","));
-    newSearch.set(
-      "direction",
-      playerControls.state.cameraDirection.map((n) => n).join(","),
-    );
+    newSearch.set("position", threeControls.position.join(","));
+    newSearch.set("target", threeControls.target.join(","));
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
     performance = parseInt(e.key) - 1;
     repeat = 2 ** performance;
@@ -117,8 +115,36 @@ export function updateTreeBuffer(flattenedTree: Float32Array) {
 }
 
 async function main() {
+  // Initialize threeControls first, even if WebGPU fails
+  // This ensures camera controls work for the WebGPU renderer when available
+  const camera = new THREE.PerspectiveCamera(
+    53.13,
+    webgpuCanvas.width / webgpuCanvas.height,
+    0.1,
+    1000
+  );
+  threeControls.initialize(camera, webgpuCanvas);
+
   const webGPU = await initWebGPU(webgpuCanvas);
-  if (!webGPU) return;
+  if (!webGPU) {
+    console.error("WebGPU not available. The SDF renderer will not work in this environment.");
+    
+    // Show a fallback message on the canvas
+    const ctx = webgpuCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(0, 0, webgpuCanvas.width, webgpuCanvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('WebGPU not supported', webgpuCanvas.width / 2, webgpuCanvas.height / 2 - 20);
+      ctx.fillText('The SDF renderer requires WebGPU', webgpuCanvas.width / 2, webgpuCanvas.height / 2 + 20);
+      ctx.fillText('Please use a compatible browser', webgpuCanvas.width / 2, webgpuCanvas.height / 2 + 60);
+    }
+    
+    // Still initialize UI and keep camera controls working
+    return;
+  }
 
   const { device, context, format } = webGPU;
 
@@ -391,7 +417,11 @@ async function main() {
   let change_counter = csgChangeCounter.peek();
   async function loop() {
     if (depthReadbackPromise) await depthReadbackPromise;
-    const state = playerControls.state;
+    
+    // Update threeControls for dampening and camera state
+    threeControls.update();
+    
+    const state = threeControls.state;
     const latest_counter = csgChangeCounter.peek();
     const csg_tree_has_changes = change_counter !== latest_counter;
     const has_changes = hasChanges.value || csg_tree_has_changes;
