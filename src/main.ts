@@ -126,7 +126,25 @@ async function main() {
   threeControls.initialize(camera, webgpuCanvas);
 
   const webGPU = await initWebGPU(webgpuCanvas);
-  if (!webGPU) return;
+  if (!webGPU) {
+    console.error("WebGPU not available. The SDF renderer will not work in this environment.");
+    
+    // Show a fallback message on the canvas
+    const ctx = webgpuCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(0, 0, webgpuCanvas.width, webgpuCanvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '20px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('WebGPU not supported', webgpuCanvas.width / 2, webgpuCanvas.height / 2 - 20);
+      ctx.fillText('The SDF renderer requires WebGPU', webgpuCanvas.width / 2, webgpuCanvas.height / 2 + 20);
+      ctx.fillText('Please use a compatible browser', webgpuCanvas.width / 2, webgpuCanvas.height / 2 + 60);
+    }
+    
+    // Still initialize UI and keep camera controls working
+    return;
+  }
 
   const { device, context, format } = webGPU;
 
