@@ -4,6 +4,7 @@ import threeControls from "./three-controls";
 import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
+import * as THREE from "three";
 
 import { csgChangeCounter, csgTree } from "./csg-tree";
 //@ts-ignore
@@ -118,6 +119,15 @@ async function main() {
   if (!webGPU) return;
 
   const { device, context, format } = webGPU;
+
+  // Initialize threeControls with a camera for the WebGPU renderer
+  const camera = new THREE.PerspectiveCamera(
+    53.13,
+    webgpuCanvas.width / webgpuCanvas.height,
+    0.1,
+    1000
+  );
+  threeControls.initialize(camera, webgpuCanvas);
 
   // Vertex data (a simple quad)
   const vertices = new Float32Array([
@@ -388,6 +398,10 @@ async function main() {
   let change_counter = csgChangeCounter.peek();
   async function loop() {
     if (depthReadbackPromise) await depthReadbackPromise;
+    
+    // Update threeControls for dampening and camera state
+    threeControls.update();
+    
     const state = threeControls.state;
     const latest_counter = csgChangeCounter.peek();
     const csg_tree_has_changes = change_counter !== latest_counter;

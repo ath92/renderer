@@ -91,6 +91,10 @@ function SpheresScene({ counter }: { counter: number }) {
         minDistance={0.1}
         maxDistance={1000}
         maxPolarAngle={Math.PI}
+        onChange={() => {
+          // Trigger hasChanges when camera moves to update WebGPU renderer
+          hasChanges.value = true;
+        }}
       />
       <ambientLight />
       <pointLight position={[10, 10, 10]} />
