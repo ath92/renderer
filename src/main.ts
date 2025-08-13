@@ -115,12 +115,8 @@ export function updateTreeBuffer(flattenedTree: Float32Array) {
 }
 
 async function main() {
-  const webGPU = await initWebGPU(webgpuCanvas);
-  if (!webGPU) return;
-
-  const { device, context, format } = webGPU;
-
-  // Initialize threeControls with a camera for the WebGPU renderer
+  // Initialize threeControls first, even if WebGPU fails
+  // This ensures camera controls work for the WebGPU renderer when available
   const camera = new THREE.PerspectiveCamera(
     53.13,
     webgpuCanvas.width / webgpuCanvas.height,
@@ -128,6 +124,11 @@ async function main() {
     1000
   );
   threeControls.initialize(camera, webgpuCanvas);
+
+  const webGPU = await initWebGPU(webgpuCanvas);
+  if (!webGPU) return;
+
+  const { device, context, format } = webGPU;
 
   // Vertex data (a simple quad)
   const vertices = new Float32Array([
