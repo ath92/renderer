@@ -1,5 +1,5 @@
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { TransformControls } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
+import { TransformControls, OrbitControls } from "@react-three/drei";
 import {
   csgTree,
   TreeNode,
@@ -11,7 +11,6 @@ import { useSignalEffect } from "@preact/signals-react";
 import * as THREE from "three";
 import { useMemo, useRef, useState } from "react";
 import { hasChanges } from "../../has-changes";
-import playerControls from "../../player-controls";
 
 function Sphere({ node }: { node: TreeNode }) {
   if (!isLeafNode(node)) return null;
@@ -49,12 +48,7 @@ function Sphere({ node }: { node: TreeNode }) {
 }
 
 function CameraUpdater() {
-  useFrame(({ camera }) => {
-    const { cameraPosition, cameraDirectionQuat } = playerControls.state;
-    camera.position.fromArray(cameraPosition);
-    camera.quaternion.fromArray(cameraDirectionQuat);
-    camera.scale.z = -1;
-  });
+  // Remove the custom camera updater since OrbitControls will handle camera positioning
   return null;
 }
 
@@ -73,6 +67,7 @@ function SpheresScene({ counter }: { counter: number }) {
   console.log("re-render spheres", nodes.length);
 
   const transformControlsRef = useRef<any>(null);
+  const orbitControlsRef = useRef<any>(null);
   const { scene } = useThree();
 
   const [controls_target, set_controls_target] = useState<THREE.Mesh>();
@@ -86,6 +81,17 @@ function SpheresScene({ counter }: { counter: number }) {
   return (
     <>
       <CameraUpdater />
+      <OrbitControls
+        ref={orbitControlsRef}
+        enableDamping={true}
+        dampingFactor={0.05}
+        enableZoom={true}
+        enablePan={true}
+        enableRotate={true}
+        minDistance={0.1}
+        maxDistance={1000}
+        maxPolarAngle={Math.PI}
+      />
       <ambientLight />
       <pointLight position={[10, 10, 10]} />
       {nodes.map((node) => (
@@ -97,7 +103,10 @@ function SpheresScene({ counter }: { counter: number }) {
           ref={transformControlsRef}
           onChange={() => {
             if (transformControlsRef.current) {
-              playerControls.enabled = !transformControlsRef.current.dragging;
+              // Disable orbit controls when transforming objects
+              if (orbitControlsRef.current) {
+                orbitControlsRef.current.enabled = !transformControlsRef.current.dragging;
+              }
               if (transformControlsRef.current.object) {
                 const object = transformControlsRef.current.object;
                 const node = csgTree.getNode(object.name);

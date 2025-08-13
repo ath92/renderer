@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { csgTree, isLeafNode } from "./csg-tree";
-import playerControls from "./player-controls";
+import threeControls from "./three-controls";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { selectedNode } from "./selection";
 import { effect } from "@preact/signals-react";
@@ -78,6 +78,9 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
   renderer.setSize(canvas.width, canvas.height);
 
+  // Initialize the three controls with camera and canvas
+  threeControls.initialize(camera, canvas);
+
   syncSpheres();
 
   transform_controls = new TransformControls(camera);
@@ -102,7 +105,7 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   };
 
   transform_controls.addEventListener("dragging-changed", ({ value }) => {
-    playerControls.enabled = !value;
+    threeControls.enabled = !value;
   });
 
   function worldPositionChanged() {
@@ -128,7 +131,10 @@ export function initThreeScene(canvas: HTMLCanvasElement) {
   function animate() {
     requestAnimationFrame(animate);
 
-    const { cameraPosition, cameraDirectionQuat } = playerControls.state;
+    // Update controls for damping
+    threeControls.update();
+
+    const { cameraPosition, cameraDirectionQuat } = threeControls.state;
     camera.position.fromArray(cameraPosition);
     camera.quaternion.fromArray(cameraDirectionQuat);
     camera.scale.z = -1;

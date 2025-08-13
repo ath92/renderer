@@ -1,6 +1,6 @@
 import "./style.css";
 import { initUI } from "./ui/index";
-import playerControls from "./player-controls";
+import threeControls from "./three-controls";
 import { getDevice, initWebGPU } from "./webgpu-init";
 import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
@@ -47,11 +47,8 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   ) {
     const newSearch = new URLSearchParams(location.search);
     newSearch.set("performance", e.key);
-    newSearch.set("position", playerControls.position.map((n) => n).join(","));
-    newSearch.set(
-      "direction",
-      playerControls.state.cameraDirection.map((n) => n).join(","),
-    );
+    newSearch.set("position", threeControls.position.join(","));
+    newSearch.set("target", threeControls.target.join(","));
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
     performance = parseInt(e.key) - 1;
     repeat = 2 ** performance;
@@ -391,7 +388,7 @@ async function main() {
   let change_counter = csgChangeCounter.peek();
   async function loop() {
     if (depthReadbackPromise) await depthReadbackPromise;
-    const state = playerControls.state;
+    const state = threeControls.state;
     const latest_counter = csgChangeCounter.peek();
     const csg_tree_has_changes = change_counter !== latest_counter;
     const has_changes = hasChanges.value || csg_tree_has_changes;
