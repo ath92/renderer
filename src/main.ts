@@ -11,7 +11,7 @@ import PoissonDisk from "fast-2d-poisson-disk-sampling";
 import { hasChanges } from "./has-changes";
 
 const urlParams = new URLSearchParams(window.location.search);
-const fractal = urlParams.get("fractal") || "mandelbulb";
+const shader = urlParams.get("shader") || urlParams.get("fractal") || "blob-tree";
 let performance = parseInt(
   (urlParams.get("performance") as string | null) ?? "0",
 );
@@ -62,8 +62,8 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 
 var treeBuffer: GPUBuffer | null = null;
 var uniformBuffer: GPUBuffer | null = null;
-var fractalBindGroupLayout: GPUBindGroupLayout | null = null;
-var fractalBindGroup: GPUBindGroup | null = null;
+var shaderBindGroupLayout: GPUBindGroupLayout | null = null;
+var shaderBindGroup: GPUBindGroup | null = null;
 
 var depthReadbackBuffer: GPUBuffer | null = null;
 
@@ -92,7 +92,7 @@ export async function depthReadback(x: number, y: number) {
 
 export function updateTreeBuffer(flattenedTree: Float32Array) {
   const device = getDevice();
-  if (!device || !treeBuffer || !uniformBuffer || !fractalBindGroupLayout)
+  if (!device || !treeBuffer || !uniformBuffer || !shaderBindGroupLayout)
     return;
 
   console.log("update tree buffer");
@@ -107,7 +107,7 @@ export function updateTreeBuffer(flattenedTree: Float32Array) {
       flattenedTree,
       GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     );
-    fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+    shaderBindGroup = createBindGroup(device, shaderBindGroupLayout, [
       { binding: 0, resource: { buffer: uniformBuffer } },
       { binding: 1, resource: { buffer: treeBuffer } },
     ]);
@@ -159,12 +159,12 @@ async function main() {
     code: passThroughVertCode,
   });
 
-  const fractalFragCode = await (
-    await fetch(`/wgsl-shaders/${fractal}.wgsl`)
+  const shaderFragCode = await (
+    await fetch(`/wgsl-shaders/${shader}.wgsl`)
   ).text();
-  const fractalFragModule = device.createShaderModule({
-    label: "Fractal Fragment Shader",
-    code: fractalFragCode,
+  const shaderFragModule = device.createShaderModule({
+    label: "SDF Shader Fragment Shader",
+    code: shaderFragCode,
   });
 
   const upsampleFragCode = await (
@@ -183,8 +183,8 @@ async function main() {
     code: blitFragCode,
   });
 
-  // Create bind group layout and bind group for fractal rendering
-  fractalBindGroupLayout = createBindGroupLayout(device, [
+  // Create bind group layout and bind group for SDF rendering
+  shaderBindGroupLayout = createBindGroupLayout(device, [
     {
       binding: 0,
       visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
@@ -196,16 +196,16 @@ async function main() {
       buffer: { type: "read-only-storage" },
     },
   ]);
-  fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+  shaderBindGroup = createBindGroup(device, shaderBindGroupLayout, [
     { binding: 0, resource: { buffer: uniformBuffer } },
     { binding: 1, resource: { buffer: treeBuffer } },
   ]);
 
-  // Create render pipeline for fractal rendering
-  const fractalRenderPipeline = device.createRenderPipeline({
-    label: "Fractal Render Pipeline",
+  // Create render pipeline for SDF rendering
+  const shaderRenderPipeline = device.createRenderPipeline({
+    label: "SDF Render Pipeline",
     layout: device.createPipelineLayout({
-      bindGroupLayouts: [fractalBindGroupLayout],
+      bindGroupLayouts: [shaderBindGroupLayout],
     }),
     vertex: {
       module: passThroughVertModule,
@@ -218,7 +218,7 @@ async function main() {
       ],
     },
     fragment: {
-      module: fractalFragModule,
+      module: shaderFragModule,
       entryPoint: "main",
       targets: [{ format: "rgba32float" }],
     },
@@ -444,9 +444,9 @@ async function main() {
         ],
       };
       let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-      passEncoder.setPipeline(fractalRenderPipeline);
+      passEncoder.setPipeline(shaderRenderPipeline);
       passEncoder.setVertexBuffer(0, vertexBuffer);
-      passEncoder.setBindGroup(0, fractalBindGroup!);
+      passEncoder.setBindGroup(0, shaderBindGroup!);
       passEncoder.draw(6);
       passEncoder.end();
 
