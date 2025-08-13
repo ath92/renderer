@@ -9,8 +9,20 @@ import {
 import { selectedNode } from "../../selection";
 import { useSignalEffect } from "@preact/signals-react";
 import * as THREE from "three";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { hasChanges } from "../../has-changes";
+import threeControls from "../../three-controls";
+
+function CameraSync() {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    // Sync the React Three Fiber camera with threeControls
+    threeControls.syncFromCamera(camera);
+  }, [camera]);
+  
+  return null;
+}
 
 function Sphere({ node }: { node: TreeNode }) {
   if (!isLeafNode(node)) return null;
@@ -80,7 +92,7 @@ function SpheresScene({ counter }: { counter: number }) {
 
   return (
     <>
-      <CameraUpdater />
+      <CameraSync />
       <OrbitControls
         ref={orbitControlsRef}
         enableDamping={true}
@@ -140,7 +152,11 @@ function SpheresScene({ counter }: { counter: number }) {
 
 export function R3fRenderer() {
   return (
-    <Canvas camera={{ fov: 53.13 }}>
+    <Canvas 
+      camera={{ fov: 53.13 }}
+      gl={{ alpha: true, premultipliedAlpha: false }}
+      style={{ background: 'transparent' }}
+    >
       <SpheresScene counter={csgChangeCounter.value} />
     </Canvas>
   );

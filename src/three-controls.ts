@@ -26,6 +26,9 @@ class ThreeControls {
   private previousTarget = new THREE.Vector3();
   private previousZoom = 1;
 
+  // External camera reference for reading state (from React Three Fiber)
+  private externalCamera: THREE.Camera | null = null;
+
   initialize(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.camera = camera;
     this.controls = new OrbitControls(camera, domElement);
@@ -59,6 +62,10 @@ class ThreeControls {
     this.controls.update();
   }
 
+  syncFromCamera(camera: THREE.Camera) {
+    this.externalCamera = camera;
+  }
+
   update() {
     if (this.controls && this.enabled) {
       this.controls.update();
@@ -77,7 +84,10 @@ class ThreeControls {
   }
 
   get state() {
-    if (!this.camera || !this.controls) {
+    // Use external camera if available (from React Three Fiber), otherwise use internal camera
+    const activeCamera = this.externalCamera || this.camera;
+    
+    if (!activeCamera) {
       // Return default state if not initialized
       return {
         hasChanges: false,
@@ -90,36 +100,57 @@ class ThreeControls {
       };
     }
 
-    // Check if anything has changed
-    const positionChanged = !this.camera.position.equals(this.previousPosition);
-    const targetChanged = !this.controls.target.equals(this.previousTarget);
-    const zoomChanged = this.camera.zoom !== this.previousZoom;
+    // Check if anything has changed by comparing with previous state
+    const positionChanged = !activeCamera.position.equals(this.previousPosition);
+    const zoomChanged = (activeCamera as any).zoom !== this.previousZoom;
+    
+    // For target change detection, we need the controls
+    let targetChanged = false;
+    if (this.controls) {
+      targetChanged = !this.controls.target.equals(this.previousTarget);
+    }
+    
     const has_changes = positionChanged || targetChanged || zoomChanged;
 
     // Update previous state
-    this.previousPosition.copy(this.camera.position);
-    this.previousTarget.copy(this.controls.target);
-    this.previousZoom = this.camera.zoom;
+    this.previousPosition.copy(activeCamera.position);
+    if (this.controls) {
+      this.previousTarget.copy(this.controls.target);
+    }
+    this.previousZoom = (activeCamera as any).zoom || 1;
 
     // Convert THREE.js camera state to gl-matrix format for compatibility
     const cameraPosition = vec3.fromValues(
-      this.camera.position.x,
-      this.camera.position.y,
-      this.camera.position.z
+      activeCamera.position.x,
+      activeCamera.position.y,
+      activeCamera.position.z
+    );
+
+    // Get the camera's world matrix (which includes both rotation and position)
+    activeCamera.updateMatrixWorld();
+    const worldMatrix = activeCamera.matrixWorld.elements;
+    
+    // Convert THREE.js matrix (column-major) to gl-matrix format
+    const cameraMatrix = mat4.fromValues(
+      worldMatrix[0], worldMatrix[1], worldMatrix[2], worldMatrix[3],
+      worldMatrix[4], worldMatrix[5], worldMatrix[6], worldMatrix[7],
+      worldMatrix[8], worldMatrix[9], worldMatrix[10], worldMatrix[11],
+      worldMatrix[12], worldMatrix[13], worldMatrix[14], worldMatrix[15]
+    );
+
+    // Extract rotation part (upper-left 3x3) for cameraDirection
+    const cameraDirection = mat4.fromValues(
+      worldMatrix[0], worldMatrix[1], worldMatrix[2], 0,
+      worldMatrix[4], worldMatrix[5], worldMatrix[6], 0,
+      worldMatrix[8], worldMatrix[9], worldMatrix[10], 0,
+      0, 0, 0, 1
     );
 
     const cameraDirectionQuat = quat.fromValues(
-      this.camera.quaternion.x,
-      this.camera.quaternion.y,
-      this.camera.quaternion.z,
-      this.camera.quaternion.w
-    );
-
-    const cameraDirection = mat4.fromQuat(mat4.create(), cameraDirectionQuat);
-    const cameraMatrix = mat4.translate(
-      mat4.create(),
-      cameraDirection,
-      cameraPosition
+      activeCamera.quaternion.x,
+      activeCamera.quaternion.y,
+      activeCamera.quaternion.z,
+      activeCamera.quaternion.w
     );
 
     return {
@@ -135,8 +166,9 @@ class ThreeControls {
 
   // Expose the underlying position for URL serialization
   get position(): number[] {
-    if (!this.camera) return [0, 0, 15];
-    return [this.camera.position.x, this.camera.position.y, this.camera.position.z];
+    const activeCamera = this.externalCamera || this.camera;
+    if (!activeCamera) return [0, 0, 15];
+    return [activeCamera.position.x, activeCamera.position.y, activeCamera.position.z];
   }
 
   get target(): number[] {

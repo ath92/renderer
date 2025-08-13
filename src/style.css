@@ -20,11 +20,26 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to WebGPU canvas below */
 }
 
-canvas {
+#viewport canvas {
+    pointer-events: auto; /* Re-enable pointer events for the Three.js canvas specifically */
+}
+
+#webgpu-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100% !important;
     height: 100% !important;
+    z-index: 1; /* Behind the Three.js viewport */
+}
+
+#viewport canvas {
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2; /* Above the WebGPU canvas */
 }
 
 /* Panel toggle button - visible only on mobile */
@@ -162,10 +177,4 @@ canvas {
     }
 }
 
-#viewport {
-    width: 100vw;
-    height: 100vh;
-    position: fixed;
-    top: 0;
-    left: 0;
-}
+
