@@ -1,15 +1,18 @@
 import { signal, useSignalEffect } from "@preact/signals-react";
 import { depthReadback } from "../main";
-import { csgTree } from "../csg-tree";
+import { Operation, csgTree } from "../csg-tree";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import playerControls, { forward } from "../player-controls";
 import { hasChanges } from "../has-changes";
+import { useState } from "react";
 
 export type Tool = "PlaceSphere";
 
 export const activeTool = signal<Tool | null>(null);
 
-function usePlaceSphereTool() {
+function PlaceSphereTool() {
+  const [op, setOp] = useState<`${Operation}`>(`${Operation.Difference}`);
+
   useSignalEffect(() => {
     if (activeTool.value !== "PlaceSphere") return;
     async function placeSphere(e: MouseEvent) {
@@ -46,24 +49,43 @@ function usePlaceSphereTool() {
         vec3.scale(vec3.create(), dir, depth),
       );
 
-      csgTree.addLeafNode(
+      csgTree.addOpLeaf(
         {
           transform: mat4.fromTranslation(mat4.create(), pos),
-          scale: 1,
+          scale: 0.1,
           name: "placed node!",
         },
-        csgTree.getRoot(),
+        {
+          name: "placed op node!",
+          smoothing: 0.05,
+          op:
+            op === `${Operation.Union}`
+              ? Operation.Union
+              : Operation.Difference,
+        },
       );
     }
     hasChanges.value = true;
     window.addEventListener("click", placeSphere);
     return () => window.removeEventListener("click", placeSphere);
   });
+
+  return (
+    <div>
+      <select
+        value={op}
+        onChange={(e) => {
+          setOp(e.target.value as "0" | "1");
+        }}
+      >
+        <option value="0">Union</option>
+        <option value="1">Difference</option>
+      </select>
+    </div>
+  );
 }
 
 export function Toolbar() {
-  usePlaceSphereTool();
-
   return (
     <div>
       <hr></hr>
@@ -75,6 +97,7 @@ export function Toolbar() {
       >
         place sphere {activeTool.value === "PlaceSphere" ? "!" : ""}
       </button>
+      <PlaceSphereTool />
     </div>
   );
 }

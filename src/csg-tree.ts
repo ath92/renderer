@@ -112,7 +112,7 @@ export class CSGTree {
     this.root = this.addOperationNode({
       op: Operation.Union,
       name: "root",
-      smoothing: 0.001,
+      smoothing: 0.051,
     });
   }
 
@@ -162,6 +162,26 @@ export class CSGTree {
     this.updateNodeAABB(node as TreeNode);
     return node as LoroTreeNode<LeafNode>;
   }
+
+  addOpLeaf(
+    params: Omit<LeafNode, "aabb" | "type">,
+    op_params: Omit<OperationNode, "aabb" | "type">,
+    rightChild?: LoroTreeNode,
+  ) {
+    const op_node = this.addOperationNode(op_params);
+    const leaf_node = this.addLeafNode(params, op_node);
+    const new_parent = rightChild?.parent();
+    if (new_parent) {
+      (op_node as LoroTreeNode).move(new_parent);
+    } else {
+      // undefined if rightChild is child of root or is undefined itself -> will make new op node root.
+      op_node.move();
+      this.root.move(op_node, 0);
+      this.root = op_node;
+    }
+    this.updateNodeAABB((new_parent ?? this.getRoot()) as TreeNode);
+  }
+
   removeNode(node: TreeNode): void {
     const parent = node.parent();
     this.tree.delete(node.id);
