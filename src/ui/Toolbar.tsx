@@ -2,7 +2,7 @@ import { signal, useSignalEffect } from "@preact/signals-react";
 import { depthReadback } from "../main";
 import { Operation, csgTree } from "../csg-tree";
 import { mat4, vec3, vec4 } from "gl-matrix";
-import playerControls, { forward } from "../player-controls";
+import playerControls from "../player-controls";
 import { hasChanges } from "../has-changes";
 import { useState } from "react";
 
