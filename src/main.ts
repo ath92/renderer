@@ -47,10 +47,13 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   ) {
     const newSearch = new URLSearchParams(location.search);
     newSearch.set("performance", e.key);
-    newSearch.set("position", playerControls.position.map((n) => n).join(","));
+    newSearch.set(
+      "position",
+      [...playerControls.position].map((n) => n).join(","),
+    );
     newSearch.set(
       "direction",
-      playerControls.state.cameraDirection.map((n) => n).join(","),
+      [...playerControls.state.cameraDirection].map((n) => n).join(","),
     );
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
     performance = parseInt(e.key) - 1;
