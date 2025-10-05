@@ -169,7 +169,7 @@ export class CSGTree {
     rightChild?: LoroTreeNode,
   ) {
     const op_node = this.addOperationNode(op_params);
-    const leaf_node = this.addLeafNode(params, op_node);
+    this.addLeafNode(params, op_node);
     const new_parent = rightChild?.parent();
     if (new_parent) {
       (op_node as LoroTreeNode).move(new_parent);
@@ -180,6 +180,7 @@ export class CSGTree {
       this.root = op_node;
     }
     this.updateNodeAABB((new_parent ?? this.getRoot()) as TreeNode);
+    this.optimize();
   }
 
   removeNode(node: TreeNode): void {
@@ -242,6 +243,117 @@ export class CSGTree {
       opNode.data.set(key, value);
     });
     this.updateNodeAABB(opNode as LoroTreeNode<OperationNode>);
+  }
+
+  public optimize(): void {
+    if (!this.root) return;
+    this._optimizeNode(this.root as TreeNode);
+    // Final update at the root to consolidate all changes
+    this.updateNodeAABB(this.root as TreeNode);
+  }
+
+  private _optimizeNode(node: TreeNode): void {
+    if (node.data.get("type") !== "operation") {
+      return;
+    }
+
+    // Post-order traversal: optimize children first
+    const children = [...(node.children() ?? [])];
+    for (const child of children) {
+      this._optimizeNode(child);
+    }
+
+    // After children are optimized, optimize the current node
+    this._flattenAssociative(node as OperationTreeNode);
+    this._collapseDifferences(node as OperationTreeNode);
+  }
+
+  private _flattenAssociative(node: OperationTreeNode): void {
+    const nodeOp = node.data.get("op");
+    if (nodeOp !== Operation.Union && nodeOp !== Operation.Intersect) {
+      return;
+    }
+
+    // Using a loop that can re-run to handle multi-level flattening, e.g. union(union(A,B), C)
+    let wasModified = true;
+    while (wasModified) {
+      wasModified = false;
+      const children = [...(node.children() ?? [])];
+      for (const child of children) {
+        if (
+          child.data.get("type") === "operation" &&
+          child.data.get("op") === nodeOp
+        ) {
+          const grandchildren = [...(child.children() ?? [])];
+          for (const grandchild of grandchildren) {
+            grandchild.move(node); // Hoist grandchild to become a direct child of the current node
+          }
+          // After moving its children, the child node is empty and can be removed.
+          this.removeNode(child);
+          wasModified = true;
+          break; // Restart the loop on the modified children list of the current node
+        }
+      }
+    }
+  }
+
+  private _collapseDifferences(node: OperationTreeNode): void {
+    if (node.data.get("op") !== Operation.Difference) {
+      return;
+    }
+
+    const children = node.children() ?? [];
+    if (children.length !== 2) return;
+
+    const childA = children[0]; // The object being subtracted from
+    const childB = children[1]; // The object being subtracted
+
+    // We are looking for the pattern: difference(difference(C, D), B)
+    if (
+      childA.data.get("type") !== "operation" ||
+      childA.data.get("op") !== Operation.Difference
+    ) {
+      return;
+    }
+
+    const opNodeA = childA as OperationTreeNode;
+    const childrenOfA = opNodeA.children() ?? [];
+    if (childrenOfA.length !== 2) return;
+
+    const nodeC = childrenOfA[0];
+    const nodeD = childrenOfA[1];
+
+    // Transformation: difference(difference(C, D), B) -> difference(C, union(D, B))
+
+    // 1. Make C the first child of the current node `node`.
+    nodeC.move(node, 0);
+
+    // 2. Group D and B under a union.
+    const nodeD_as_op = nodeD as OperationTreeNode;
+    if (
+      nodeD_as_op.data.get("type") === "operation" &&
+      nodeD_as_op.data.get("op") === Operation.Union
+    ) {
+      // If D is already a union, just add B to it.
+      childB.move(nodeD_as_op);
+      // And move D to be the second child of the current node.
+      nodeD_as_op.move(node, 1);
+    } else {
+      // Otherwise, create a new union node.
+      const newUnionNode = this.addOperationNode({
+        op: Operation.Union,
+        name: "optimized-union",
+        smoothing: 0.01, // Smoothing for unions is often 0
+      });
+      // Move D and B to be children of the new union node.
+      nodeD.move(newUnionNode);
+      childB.move(newUnionNode);
+      // Move the new union node to be the second child of the current node.
+      newUnionNode.move(node, 1);
+    }
+
+    // 3. The old `childA` node is now empty (we moved its children C and D). Remove it.
+    this.removeNode(childA);
   }
 
   getRoot(): LoroTreeNode<OperationNode> {
