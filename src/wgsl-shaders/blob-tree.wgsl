@@ -220,9 +220,9 @@ struct RaymarchConfig {
 
 fn raymarch_config() -> RaymarchConfig {
     var config: RaymarchConfig;
-    config.max_steps = 100;
+    config.max_steps = 50;
     config.max_distance = 100.;
-    config.surface_threshold = 0.01;
+    config.surface_threshold = 0.001;
     return config;
 }
 

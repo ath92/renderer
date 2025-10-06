@@ -6,7 +6,7 @@ import { createBuffer, updateBuffer } from "./webgpu-buffers";
 import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
 
 import { csgChangeCounter, csgTree } from "./csg-tree";
-//@ts-ignore
+// @ts-expect-error
 import PoissonDisk from "fast-2d-poisson-disk-sampling";
 import { hasChanges } from "./has-changes";
 
@@ -63,12 +63,12 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   }
 });
 
-var treeBuffer: GPUBuffer | null = null;
-var uniformBuffer: GPUBuffer | null = null;
-var fractalBindGroupLayout: GPUBindGroupLayout | null = null;
-var fractalBindGroup: GPUBindGroup | null = null;
+let treeBuffer: GPUBuffer | null = null;
+let uniformBuffer: GPUBuffer | null = null;
+let fractalBindGroupLayout: GPUBindGroupLayout | null = null;
+let fractalBindGroup: GPUBindGroup | null = null;
 
-var depthReadbackBuffer: GPUBuffer | null = null;
+let depthReadbackBuffer: GPUBuffer | null = null;
 
 let depthReadbackPromise: Promise<number> | null = null;
 export async function depthReadback(x: number, y: number) {
@@ -344,7 +344,10 @@ async function main() {
         usage:
           GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
       });
-      const offsets = new PoissonDisk({ shape: [r, r], radius: 0.1 }).fill();
+      const offsets = new PoissonDisk({
+        shape: [r, r],
+        radius: 0.1,
+      }).fill();
       offsets.sort(() => Math.random() - 0.5);
       offsets.unshift([r / 2, r / 2]);
       return { fbo: texture, shape, offsets };

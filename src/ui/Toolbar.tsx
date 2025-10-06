@@ -4,15 +4,14 @@ import { Operation, csgTree } from "../csg-tree";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import playerControls from "../player-controls";
 import { hasChanges } from "../has-changes";
-import { useState } from "react";
+import "./style.css";
 
 export type Tool = "PlaceSphere";
 
-export const activeTool = signal<Tool | null>(null);
+export const activeTool = signal<Tool | null>("PlaceSphere");
+const op = signal<`${Operation}`>(`${Operation.Union}`);
 
 function PlaceSphereTool() {
-  const [op, setOp] = useState<`${Operation}`>(`${Operation.Difference}`);
-
   useSignalEffect(() => {
     if (activeTool.value !== "PlaceSphere") return;
     async function placeSphere(e: MouseEvent) {
@@ -59,43 +58,52 @@ function PlaceSphereTool() {
           name: "placed op node!",
           smoothing: 0.05,
           op:
-            op === `${Operation.Union}`
+            op.value === `${Operation.Union}`
               ? Operation.Union
               : Operation.Difference,
         },
       );
     }
     hasChanges.value = true;
-    window.addEventListener("click", placeSphere);
-    return () => window.removeEventListener("click", placeSphere);
+    const canvasEl = document.querySelector(
+      "canvas:not(#webgpu-canvas)",
+    ) as HTMLCanvasElement;
+    if (!canvasEl) return;
+    canvasEl.addEventListener("click", placeSphere);
+    return () => canvasEl.removeEventListener("click", placeSphere);
   });
 
-  return (
-    <div>
-      <select
-        value={op}
-        onChange={(e) => {
-          setOp(e.target.value as "0" | "1");
-        }}
-      >
-        <option value="0">Union</option>
-        <option value="1">Difference</option>
-      </select>
-    </div>
-  );
+  return null;
 }
 
 export function Toolbar() {
+  const isPlusActive =
+    activeTool.peek() === "PlaceSphere" && op.value === `${Operation.Union}`;
+  const isMinusActive =
+    activeTool.peek() === "PlaceSphere" &&
+    op.value === `${Operation.Difference}`;
+
   return (
-    <div>
-      <hr></hr>
+    <div className="toolbar">
       <button
+        className="tool-btn"
+        data-active={isPlusActive}
         onClick={() => {
-          activeTool.value =
-            activeTool.peek() === "PlaceSphere" ? null : "PlaceSphere";
+          activeTool.value = isPlusActive ? null : "PlaceSphere";
+          op.value = `${Operation.Union}`;
         }}
       >
-        place sphere {activeTool.value === "PlaceSphere" ? "!" : ""}
+        +
+      </button>
+      <button
+        className="tool-btn"
+        data-active={isMinusActive}
+        onClick={() => {
+          activeTool.value = isMinusActive ? null : "PlaceSphere";
+          op.value = `${Operation.Difference}`;
+        }}
+      >
+        -
       </button>
       <PlaceSphereTool />
     </div>

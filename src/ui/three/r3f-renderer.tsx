@@ -7,11 +7,12 @@ import {
   csgChangeCounter,
 } from "../../csg-tree";
 import { selectedNode } from "../../selection";
-import { useSignalEffect } from "@preact/signals-react";
+import { signal, useSignalEffect } from "@preact/signals-react";
 import * as THREE from "three";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hasChanges } from "../../has-changes";
 import playerControls from "../../player-controls";
+import { useSignals } from "@preact/signals-react/runtime";
 
 function Sphere({ node }: { node: TreeNode }) {
   if (!isLeafNode(node)) return null;
@@ -42,7 +43,7 @@ function Sphere({ node }: { node: TreeNode }) {
         selectedNode.value = node.id;
       }}
     >
-      <sphereGeometry args={[1, 16, 8]} />
+      <sphereGeometry args={[1, 8, 4]} />
       <meshBasicMaterial wireframe opacity={0.1} transparent />
     </mesh>
   );
@@ -58,10 +59,11 @@ function CameraUpdater() {
   return null;
 }
 
+const showHelperSpheres = signal(false);
+
 function SpheresScene({ counter }: { counter: number }) {
-  console.log("re-render!", counter);
+  useSignals();
   const nodes = useMemo(() => {
-    console.log("hahaha", csgChangeCounter.value, counter);
     const newNodes: TreeNode[] = [];
     csgTree.traverse((node) => {
       newNodes.push(node);
@@ -69,8 +71,6 @@ function SpheresScene({ counter }: { counter: number }) {
 
     return newNodes;
   }, [counter]);
-
-  console.log("re-render spheres", nodes.length);
 
   const transformControlsRef = useRef<any>(null);
   const { scene } = useThree();
@@ -83,14 +83,23 @@ function SpheresScene({ counter }: { counter: number }) {
     set_controls_target(object as THREE.Mesh);
   });
 
+  useEffect(() => {
+    function toggleHelperSpheres(e: KeyboardEvent) {
+      if (e.key === "h") {
+        showHelperSpheres.value = !showHelperSpheres.peek();
+      }
+    }
+    window.addEventListener("keyup", toggleHelperSpheres);
+    return () => window.removeEventListener("keyup", toggleHelperSpheres);
+  }, []);
+
   return (
     <>
       <CameraUpdater />
       <ambientLight />
       <pointLight position={[10, 10, 10]} />
-      {nodes.map((node) => (
-        <Sphere key={node.id} node={node} />
-      ))}
+      {showHelperSpheres.value &&
+        nodes.map((node) => <Sphere key={node.id} node={node} />)}
 
       {controls_target && (
         <TransformControls
@@ -112,15 +121,6 @@ function SpheresScene({ counter }: { counter: number }) {
           object={controls_target}
         />
       )}
-      <mesh
-        onClick={(e) => {
-          e.stopPropagation();
-          selectedNode.value = null;
-        }}
-      >
-        <sphereGeometry args={[500, 32, 32]} />
-        <meshBasicMaterial side={THREE.BackSide} transparent opacity={0} />
-      </mesh>
     </>
   );
 }

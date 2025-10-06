@@ -1,0 +1,31 @@
+.toolbar {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translate(-50%, 0);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    background-color: rgba(80, 80, 80, 0.5);
+    padding: 10px;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.tool-btn {
+    border-radius: 4px;
+    border: none;
+    background: #aaa;
+    color: #666;
+    box-sizing: border-box;
+    display: block;
+    width: 30px;
+    height: 30px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.tool-btn[data-active="true"] {
+    background: #eee;
+    color: #09f;
+}

@@ -60,7 +60,7 @@ function OperationNode({ node }: { node: OperationTreeNode }) {
         <div className="children">
           {(node.children() ?? []).map((childNode) => {
             return childNode ? (
-              <TreeNode key={childNode.id} node={childNode} />
+              <TreeNodeComponent key={childNode.id} node={childNode} />
             ) : null;
           })}
         </div>
@@ -69,7 +69,7 @@ function OperationNode({ node }: { node: OperationTreeNode }) {
   );
 }
 
-function TreeNode({ node }: { node: TreeNode }) {
+function TreeNodeComponent({ node }: { node: TreeNode }) {
   if (node.data.get("type") === "leaf") {
     return <LeafNode node={node} />;
   }
@@ -86,7 +86,7 @@ export function TreeView() {
 
   return (
     <div id="tree-view">
-      <TreeNode node={rootNode} />
+      <TreeNodeComponent node={rootNode} />
     </div>
   );
 }

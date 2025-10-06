@@ -651,6 +651,19 @@ export const isOperationNode = (node: TreeNode): node is OperationTreeNode =>
 export const isLeafNode = (node: TreeNode): node is LeafTreeNode =>
   node.data.get("type") === "leaf";
 
+function generateBasicStarterTree() {
+  const csgTree = new CSGTree();
+  csgTree.addLeafNode(
+    {
+      name: "first sphere",
+      scale: 1,
+      transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    },
+    csgTree.getRoot(),
+  );
+  return csgTree;
+}
+
 export function generateRandomBlobTree(
   numLeaves: number,
   numChildrenPerNode: number,
@@ -762,4 +775,5 @@ export function generateRandomBlobTree(
   return csgTree;
 }
 
-export const csgTree = generateRandomBlobTree(5, 5);
+export const csgTree = generateBasicStarterTree();
+// export const csgTree = generateRandomBlobTree(1, 1);

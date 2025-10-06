@@ -35,7 +35,7 @@ type Mat3 = [
 const position = vec3.fromValues(
   ...((searchPos
     ? searchPos.split(",").map((s) => parseFloat(s))
-    : [0, 0, 15]) as [number, number, number]),
+    : [0, 0, 3.5]) as [number, number, number]),
 );
 const direction = mat3.fromValues(
   ...((searchDir

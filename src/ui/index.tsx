@@ -14,8 +14,8 @@ export function App() {
       <div id="left-panel">
         <TreeView />
         <SelectedNodeSettings />
-        <Toolbar />
       </div>
+      <Toolbar />
     </>
   );
 }
