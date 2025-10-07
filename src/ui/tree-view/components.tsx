@@ -51,7 +51,7 @@ function OperationNode({ node }: { node: OperationTreeNode }) {
       onClick={selectNodeHandler(node.id)}
     >
       <div className="node-details" onClick={() => toggleNode(node.id)}>
-        <span>{node.data.get("name")}</span>
+        <span>{node.data.get("name")}</span>{" "}
         <span className="operation-type">
           {OperationMap[node.data.get("op")]}
         </span>

@@ -3,6 +3,7 @@ import { R3fRenderer } from "./three/r3f-renderer";
 import { SelectedNodeSettings, TreeView } from "./tree-view/components";
 import { Toolbar } from "./Toolbar";
 import { useSignals } from "@preact/signals-react/runtime";
+import { isSidebarOpen } from "./state";
 
 export function App() {
   useSignals();
@@ -11,9 +12,20 @@ export function App() {
       <div id="viewport">
         <R3fRenderer />
       </div>
-      <div id="left-panel">
-        <TreeView />
-        <SelectedNodeSettings />
+      <div
+        id="left-panel-container"
+        className={isSidebarOpen.value ? "open" : ""}
+      >
+        <button
+          id="sidebar-toggle-btn"
+          onClick={() => (isSidebarOpen.value = !isSidebarOpen.value)}
+        >
+          {isSidebarOpen.value ? "<" : ">"}
+        </button>
+        <div id="left-panel">
+          <TreeView />
+          <SelectedNodeSettings />
+        </div>
       </div>
       <Toolbar />
     </>
