@@ -84,3 +84,8 @@
     background: #eee;
     color: #09f;
 }
+
+.sphere-scale-toolbar {
+    display: flex;
+    gap: 5px;
+}

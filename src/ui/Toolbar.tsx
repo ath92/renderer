@@ -10,6 +10,7 @@ export type Tool = "PlaceSphere";
 
 export const activeTool = signal<Tool | null>("PlaceSphere");
 const op = signal<`${Operation}`>(`${Operation.Union}`);
+const sphereScale = signal<"small" | "medium" | "large">("medium");
 
 function PlaceSphereTool() {
   useSignalEffect(() => {
@@ -48,15 +49,28 @@ function PlaceSphereTool() {
         vec3.scale(vec3.create(), dir, depth),
       );
 
+      let scale: number;
+      switch (sphereScale.value) {
+        case "small":
+          scale = 0.05;
+          break;
+        case "medium":
+          scale = 0.1;
+          break;
+        case "large":
+          scale = 0.2;
+          break;
+      }
+
       csgTree.addOpLeaf(
         {
           transform: mat4.fromTranslation(mat4.create(), pos),
-          scale: 0.1,
+          scale,
           name: "placed node!",
         },
         {
           name: "placed op node!",
-          smoothing: 0.05,
+          smoothing: 0.5 * scale,
           op:
             op.value === `${Operation.Union}`
               ? Operation.Union
@@ -105,6 +119,29 @@ export function Toolbar() {
       >
         -
       </button>
+      <div className="sphere-scale-toolbar">
+        <button
+          className="tool-btn"
+          data-active={sphereScale.value === "small"}
+          onClick={() => (sphereScale.value = "small")}
+        >
+          S
+        </button>
+        <button
+          className="tool-btn"
+          data-active={sphereScale.value === "medium"}
+          onClick={() => (sphereScale.value = "medium")}
+        >
+          M
+        </button>
+        <button
+          className="tool-btn"
+          data-active={sphereScale.value === "large"}
+          onClick={() => (sphereScale.value = "large")}
+        >
+          L
+        </button>
+      </div>
       <PlaceSphereTool />
     </div>
   );
