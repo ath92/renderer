@@ -190,11 +190,20 @@ fn evaluate_scene_sdf_bvh_2(point: vec3<f32>, ray_dir: vec3<f32>, steps: i32) ->
             let child1_index = i32(node.tree_indices.x);
             let child2_index = i32(node.tree_indices.y);
 
+            let has_child_1 = child1_index != -1;
+            let has_child_2 = child2_index != -1;
+
+            if (has_child_1 && !has_child_2) {
+                traversal_stack[stack_ptr] = child1_index;
+                stack_ptr++;
+                continue;
+            }
+
             // Push the parent for post-order evaluation (negative index)
             traversal_stack[stack_ptr] = -(node_index) - 1;
             stack_ptr++;
 
-            if (child2_index != -1) {
+            if (has_child_2) {
                 traversal_stack[stack_ptr] = child2_index;
                 stack_ptr++;
             }

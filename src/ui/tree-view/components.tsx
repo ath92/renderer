@@ -8,6 +8,7 @@ import {
   isOperationNode,
   isLeafNode,
   csgChangeCounter,
+  NormalizedTreeNode,
 } from "../../csg-tree";
 import { selectedNode } from "../../selection";
 import { MouseEvent, useRef } from "react";
@@ -76,6 +77,79 @@ function TreeNodeComponent({ node }: { node: TreeNode }) {
   return <OperationNode node={node as OperationTreeNode} />;
 }
 
+function NormalizedLeafNode({ node }: { node: NormalizedTreeNode }) {
+  return (
+    <div className={`tree-node leaf-node ${selectedClass(node.id!)}`}>
+      {node.name}
+    </div>
+  );
+}
+
+function NormalizedOperationNode({
+  node,
+  allNodes,
+}: {
+  node: NormalizedTreeNode;
+  allNodes: Map<TreeID, NormalizedTreeNode>;
+}) {
+  if (node.type !== "operation") return null;
+  const isCollapsed = collapsedNodes.value.has(node.id!);
+
+  return (
+    <div className={`tree-node operation-node ${selectedClass(node.id!)}`}>
+      <div className="node-details" onClick={() => toggleNode(node.id!)}>
+        <span>{node.name}</span>{" "}
+        <span className="operation-type">
+          {OperationMap[node.op as Operation]}
+        </span>
+      </div>
+      {!isCollapsed && (
+        <div className="children">
+          {(node.children ?? []).map((childId: TreeID) => {
+            const childNode = allNodes.get(childId);
+            return childNode ? (
+              <NormalizedTreeNodeComponent
+                key={childNode.id}
+                node={childNode}
+                allNodes={allNodes}
+              />
+            ) : null;
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NormalizedTreeNodeComponent({
+  node,
+  allNodes,
+}: {
+  node: NormalizedTreeNode;
+  allNodes: Map<TreeID, NormalizedTreeNode>;
+}) {
+  if (node.type === "leaf") {
+    return <NormalizedLeafNode node={node} />;
+  }
+  return <NormalizedOperationNode node={node} allNodes={allNodes} />;
+}
+
+export function NormalizedTreeView() {
+  csgChangeCounter.value; // subscribe to changes
+  const { nodes, rootId } = csgTree.getNormalizedTree();
+  const rootNode = rootId ? nodes.get(rootId) : null;
+
+  if (!rootNode) {
+    return <div>No data</div>;
+  }
+
+  return (
+    <div className="tree-view">
+      <NormalizedTreeNodeComponent node={rootNode} allNodes={nodes} />
+    </div>
+  );
+}
+
 export function TreeView() {
   const rootNode = csgTree.getRoot();
   console.log("re-render tree!", csgChangeCounter.value);
@@ -87,7 +161,12 @@ export function TreeView() {
   return (
     <>
       <div className="tree-view">
+        <h2>Original Tree</h2>
         <TreeNodeComponent node={rootNode} />
+      </div>
+      <div className="tree-view">
+        <h2>Normalized Tree</h2>
+        <NormalizedTreeView />
       </div>
     </>
   );

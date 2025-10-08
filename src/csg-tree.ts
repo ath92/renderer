@@ -56,7 +56,7 @@ export type TreeNode = LoroTreeNode<CSGNode>;
 export type OperationTreeNode = LoroTreeNode<OperationNode>;
 export type LeafTreeNode = LoroTreeNode<LeafNode>;
 
-type NormalizedTreeNode = CSGNode & {
+export type NormalizedTreeNode = CSGNode & {
   id?: TreeID;
   parent?: TreeID;
   children?: TreeID[];
@@ -383,7 +383,7 @@ export class CSGTree {
     }
   }
 
-  private getNormalizedTree(): {
+  public getNormalizedTree(): {
     nodes: Map<TreeID, NormalizedTreeNode>;
     rootId: TreeID | null;
   } {
@@ -423,7 +423,7 @@ export class CSGTree {
                   type: "operation",
                   op: newNode.op,
                   smoothing: newNode.smoothing,
-                  name: `${newNode.name} (normalized)`,
+                  name: `${newNode.name} (n ${newNode.smoothing})`,
                   children: [currentChildren[i], currentChildren[i + 1]],
                   parent: newNode.id,
                   aabb: AABB_UTILITIES.create(),
