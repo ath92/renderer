@@ -11,6 +11,7 @@ export type Tool = "PlaceSphere";
 export const activeTool = signal<Tool | null>("PlaceSphere");
 const op = signal<`${Operation}`>(`${Operation.Union}`);
 const sphereScale = signal<"small" | "medium" | "large">("medium");
+const smoothing = signal<"low" | "medium" | "high">("medium");
 
 function PlaceSphereTool() {
   useSignalEffect(() => {
@@ -62,6 +63,19 @@ function PlaceSphereTool() {
           break;
       }
 
+      let smoothingValue: number;
+      switch (smoothing.value) {
+        case "low":
+          smoothingValue = 0.01;
+          break;
+        case "medium":
+          smoothingValue = 0.5;
+          break;
+        case "high":
+          smoothingValue = 1.0;
+          break;
+      }
+
       csgTree.addOpLeaf(
         {
           transform: mat4.fromTranslation(mat4.create(), pos),
@@ -70,7 +84,7 @@ function PlaceSphereTool() {
         },
         {
           name: "placed op node!",
-          smoothing: 0.5 * scale,
+          smoothing: smoothingValue * scale,
           op:
             op.value === `${Operation.Union}`
               ? Operation.Union
@@ -99,27 +113,29 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <button
-        className="tool-btn"
-        data-active={isPlusActive}
-        onClick={() => {
-          activeTool.value = isPlusActive ? null : "PlaceSphere";
-          op.value = `${Operation.Union}`;
-        }}
-      >
-        +
-      </button>
-      <button
-        className="tool-btn"
-        data-active={isMinusActive}
-        onClick={() => {
-          activeTool.value = isMinusActive ? null : "PlaceSphere";
-          op.value = `${Operation.Difference}`;
-        }}
-      >
-        -
-      </button>
-      <div className="sphere-scale-toolbar">
+      <div className="button-group">
+        <button
+          className="tool-btn"
+          data-active={isPlusActive}
+          onClick={() => {
+            activeTool.value = isPlusActive ? null : "PlaceSphere";
+            op.value = `${Operation.Union}`;
+          }}
+        >
+          +
+        </button>
+        <button
+          className="tool-btn"
+          data-active={isMinusActive}
+          onClick={() => {
+            activeTool.value = isMinusActive ? null : "PlaceSphere";
+            op.value = `${Operation.Difference}`;
+          }}
+        >
+          -
+        </button>
+      </div>
+      <div className="button-group">
         <button
           className="tool-btn"
           data-active={sphereScale.value === "small"}
@@ -140,6 +156,29 @@ export function Toolbar() {
           onClick={() => (sphereScale.value = "large")}
         >
           L
+        </button>
+      </div>
+      <div className="button-group">
+        <button
+          className="tool-btn"
+          data-active={smoothing.value === "low"}
+          onClick={() => (smoothing.value = "low")}
+        >
+          SL
+        </button>
+        <button
+          className="tool-btn"
+          data-active={smoothing.value === "medium"}
+          onClick={() => (smoothing.value = "medium")}
+        >
+          SM
+        </button>
+        <button
+          className="tool-btn"
+          data-active={smoothing.value === "high"}
+          onClick={() => (smoothing.value = "high")}
+        >
+          SH
         </button>
       </div>
       <PlaceSphereTool />

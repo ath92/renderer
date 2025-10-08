@@ -85,9 +85,11 @@ export function TreeView() {
   }
 
   return (
-    <div id="tree-view">
-      <TreeNodeComponent node={rootNode} />
-    </div>
+    <>
+      <div className="tree-view">
+        <TreeNodeComponent node={rootNode} />
+      </div>
+    </>
   );
 }
 

@@ -548,7 +548,7 @@ async function main() {
         console.log(frame, fps);
         let nextPerformance = performance;
         if (fps > 120 - MARGIN) nextPerformance = Math.max(0, performance - 1);
-        else if (fps < 40 - MARGIN)
+        else if (fps < 30 - MARGIN)
           nextPerformance = Math.min(maxPerformance - 1, performance + 1);
         // if (performance !== nextPerformance) hasChanges.value = true;
         // nextPerformance = 3;

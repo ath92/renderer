@@ -2,8 +2,7 @@
     position: fixed;
     top: 20px;
     left: 50%;
-    width: 70px;
-    transform: translate(-70px, 0);
+    transform: translate(-50%, 0);
     border-radius: 10px;
     backdrop-filter: blur(10px);
     background-color: rgba(80, 80, 80, 0.5);
@@ -85,7 +84,19 @@
     color: #09f;
 }
 
-.sphere-scale-toolbar {
+.button-group {
     display: flex;
-    gap: 5px;
+    flex-direction: row;
+    gap: 0px;
+}
+
+.button-group > button {
+    border-radius: 0;
+}
+
+.button-group > button:first-child {
+    border-radius: 4px 0 0 4px;
+}
+.button-group > button:last-child {
+    border-radius: 0 4px 4px 0;
 }

@@ -282,7 +282,8 @@ export class CSGTree {
       for (const child of children) {
         if (
           child.data.get("type") === "operation" &&
-          child.data.get("op") === nodeOp
+          child.data.get("op") === nodeOp &&
+          child.data.get("smoothing") === node.data.get("smoothing")
         ) {
           const grandchildren = [...(child.children() ?? [])];
           for (const grandchild of grandchildren) {
@@ -406,10 +407,7 @@ export class CSGTree {
       }
       normalizedNodes.set(newNode.id, newNode);
 
-      if (
-        newNode.type === "operation" &&
-        originalNode.data.get("type") === "operation"
-      ) {
+      if (newNode.type === "operation") {
         newNode.children = (originalNode.children() ?? []).map((child) =>
           buildNormalizedTree(child.id, newNode.id),
         );

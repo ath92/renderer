@@ -2,7 +2,7 @@ h2 {
     font-size: 12px;
 }
 
-#tree-view {
+.tree-view {
     color: white;
     padding: 10px;
     max-height: 50%;
