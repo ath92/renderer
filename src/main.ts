@@ -11,7 +11,7 @@ import PoissonDisk from "fast-2d-poisson-disk-sampling";
 import { hasChanges } from "./has-changes";
 
 const urlParams = new URLSearchParams(window.location.search);
-const fractal = urlParams.get("fractal") || "mandelbulb";
+const fractal = urlParams.get("fractal") || "blob-tree";
 let performance = parseInt(
   (urlParams.get("performance") as string | null) ?? "0",
 );
@@ -549,7 +549,10 @@ async function main() {
         let nextPerformance = performance;
         if (fps > 120 - MARGIN) nextPerformance = Math.max(0, performance - 1);
         else if (fps < 30 - MARGIN)
-          nextPerformance = Math.min(maxPerformance - 1, performance + 1);
+          nextPerformance = Math.min(
+            Math.min(maxPerformance - 1, performance + 1),
+            4,
+          );
         // if (performance !== nextPerformance) hasChanges.value = true;
         // nextPerformance = 3;
         performance = nextPerformance;
