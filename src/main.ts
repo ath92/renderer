@@ -1,330 +1,567 @@
-import './style.css'
-import Regl, { Buffer, Framebuffer, Mat4, Renderbuffer, Texture, Vec2, Vec3 } from "regl"
+import "./style.css";
+import { initUI } from "./ui/index";
+import playerControls from "./player-controls";
+import { getDevice, initWebGPU } from "./webgpu-init";
+import { createBuffer, updateBuffer } from "./webgpu-buffers";
+import { createBindGroupLayout, createBindGroup } from "./webgpu-bind-groups";
+
+import { csgChangeCounter, csgTree } from "./csg-tree";
 //@ts-ignore
-import PoissonDisk from "fast-2d-poisson-disk-sampling"
-import passThroughVert from "./pass-through-vert.glsl"
-import playerControls from './player-controls'
+import PoissonDisk from "fast-2d-poisson-disk-sampling";
+import { hasChanges } from "./has-changes";
 
 const urlParams = new URLSearchParams(window.location.search);
-const fractal = urlParams.get('fractal') || 'mandelbulb';
-let performance = parseInt(urlParams.get("performance") as string | null ?? "0")
+const fractal = urlParams.get("fractal") || "mandelbulb";
+let performance = parseInt(
+  (urlParams.get("performance") as string | null) ?? "0",
+);
 
-const maxPerformance = 4
+const maxPerformance = 4;
 
-let repeat = 2 ** performance
+let repeat = 2 ** performance;
 
-const canvas = document.createElement('canvas');
-document.querySelector('#app')!.appendChild(canvas);
+const webgpuCanvas = document.getElementById(
+  "webgpu-canvas",
+) as HTMLCanvasElement;
+
 // resize to prevent rounding errors
 const width = window.innerWidth - (window.innerWidth % 8);
 const height = window.innerHeight - (window.innerHeight % 8);
-canvas.width = width
-canvas.height = height
-  
-let frame = 0
-let step = 0
+webgpuCanvas.width = width;
+webgpuCanvas.height = height;
+
+let frame = 0;
+let step = 0;
+let requestDepthReadback = false;
 
 window.addEventListener("keyup", (e: KeyboardEvent) => {
-  if (Array(maxPerformance).fill(0).map((_, i) => i.toString()).includes(e.key)) {
-    const newSearch = new URLSearchParams(location.search)
-    newSearch.set("performance", e.key)
-    newSearch.set("position", playerControls.position.map((n) => n).join(","))
-    newSearch.set("direction", playerControls.state.cameraDirection.map((n) => n).join(","))
+  if (e.key === "d") {
+    requestDepthReadback = true;
+    console.log("Depth readback requested.");
+  }
+  if (
+    Array(maxPerformance)
+      .fill(0)
+      .map((_, i) => i.toString())
+      .includes(e.key)
+  ) {
+    const newSearch = new URLSearchParams(location.search);
+    newSearch.set("performance", e.key);
+    newSearch.set("position", playerControls.position.map((n) => n).join(","));
+    newSearch.set(
+      "direction",
+      playerControls.state.cameraDirection.map((n) => n).join(","),
+    );
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
-    performance = parseInt(e.key) - 1
-    repeat = 2 ** performance
-    step = 0
-    frame = 0
+    performance = parseInt(e.key) - 1;
+    repeat = 2 ** performance;
+    step = 0;
+    frame = 0;
   }
 });
 
-const { default: frag } = await import(`./fragment-shaders/${fractal}.glsl`)
-const context = canvas.getContext("webgl", {
-    preserveDrawingBuffer: false,
-});
+var treeBuffer: GPUBuffer | null = null;
+var uniformBuffer: GPUBuffer | null = null;
+var fractalBindGroupLayout: GPUBindGroupLayout | null = null;
+var fractalBindGroup: GPUBindGroup | null = null;
 
-if (!context) throw new Error("no context")
+var depthReadbackBuffer: GPUBuffer | null = null;
 
-const regl = Regl(context); // no params = full screen canvas
+let depthReadbackPromise: Promise<number> | null = null;
+export async function depthReadback(x: number, y: number) {
+  if (!depthReadbackBuffer)
+    throw new Error("depth readback buffer not initialized");
 
-const precisionFbos = Array(maxPerformance).fill(0).map((_, i) => {
-  const repeat = 2 ** i
-  const shape = [width / repeat, height / repeat] as [number, number]
-  const color = regl.texture({
-    shape,
-    // mag: 'linear',
-  })
+  depthReadbackPromise = depthReadbackBuffer
+    .mapAsync(GPUMapMode.READ)
+    .then(() => {
+      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+      const depthData = new Float32Array(depthReadbackBuffer!.getMappedRange());
+      console.log("Depth data:", depthData.length, width * height);
+      const row = Math.round(y - webgpuCanvas.offsetTop);
+      const col = Math.round(x - webgpuCanvas.offsetLeft);
+      const index = (row * bytesPerRow) / 4 + col;
+      const d = depthData[index];
+      console.log("depth at pixel", d, index);
+      depthReadbackBuffer!.unmap();
+      return d;
+    });
 
-  console.log(shape, repeat)
-  
-  const fbo  = regl.framebuffer({
-    shape,
-    depth: false,
-    color,
-  })
-  
-  function shuffleArray(array: any[]) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
+  return depthReadbackPromise;
+}
+
+export function updateTreeBuffer(flattenedTree: Float32Array) {
+  const device = getDevice();
+  if (!device || !treeBuffer || !uniformBuffer || !fractalBindGroupLayout)
+    return;
+
+  console.log("update tree buffer");
+
+  if (flattenedTree.byteLength > treeBuffer.size) {
+    console.log(
+      `Resizing tree buffer from ${treeBuffer.size} to ${flattenedTree.byteLength}`,
+    );
+    treeBuffer.destroy();
+    treeBuffer = createBuffer(
+      device,
+      flattenedTree,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    );
+    fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+      { binding: 0, resource: { buffer: uniformBuffer } },
+      { binding: 1, resource: { buffer: treeBuffer } },
+    ]);
+  } else {
+    updateBuffer(device, treeBuffer, flattenedTree);
+  }
+}
+
+async function main() {
+  const webGPU = await initWebGPU(webgpuCanvas);
+  if (!webGPU) return;
+
+  const { device, context, format } = webGPU;
+
+  // Vertex data (a simple quad)
+  const vertices = new Float32Array([
+    -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0,
+  ]);
+  const vertexBuffer = createBuffer(device, vertices, GPUBufferUsage.VERTEX);
+
+  // Uniform buffer for SDF uniforms
+  const uniformBufferSize = 128;
+  uniformBuffer = device.createBuffer({
+    size: Math.ceil(uniformBufferSize / 32) * 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  // Uniform buffer for Upsample uniforms
+  const upsampleUniformBufferSize = 8 + 4 + 4 + 8 + 4;
+  const upsampleUniformBuffer = device.createBuffer({
+    size: Math.ceil(upsampleUniformBufferSize / 32) * 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  // Storage buffer for the blob tree
+  const flattenedTree = csgTree.serializeTreeForWebGPU();
+  treeBuffer = createBuffer(
+    device,
+    flattenedTree,
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  );
+
+  // Load shaders
+  const passThroughVertCode = await (
+    await fetch("/src/wgsl-shaders/pass-through.wgsl")
+  ).text();
+  const passThroughVertModule = device.createShaderModule({
+    label: "Pass Through Vertex Shader",
+    code: passThroughVertCode,
+  });
+
+  const fractalFragCode = await (
+    await fetch(`/src/wgsl-shaders/${fractal}.wgsl`)
+  ).text();
+  const fractalFragModule = device.createShaderModule({
+    label: "Fractal Fragment Shader",
+    code: fractalFragCode,
+  });
+
+  const upsampleFragCode = await (
+    await fetch("/src/wgsl-shaders/upsample.wgsl")
+  ).text();
+  const upsampleFragModule = device.createShaderModule({
+    label: "Upsample Fragment Shader",
+    code: upsampleFragCode,
+  });
+
+  const blitFragCode = await (
+    await fetch("/src/wgsl-shaders/blit.wgsl")
+  ).text();
+  const blitFragModule = device.createShaderModule({
+    label: "Blit Fragment Shader",
+    code: blitFragCode,
+  });
+
+  // Create bind group layout and bind group for fractal rendering
+  fractalBindGroupLayout = createBindGroupLayout(device, [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+      buffer: { type: "uniform" },
+    },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.FRAGMENT,
+      buffer: { type: "read-only-storage" },
+    },
+  ]);
+  fractalBindGroup = createBindGroup(device, fractalBindGroupLayout, [
+    { binding: 0, resource: { buffer: uniformBuffer } },
+    { binding: 1, resource: { buffer: treeBuffer } },
+  ]);
+
+  // Create render pipeline for fractal rendering
+  const fractalRenderPipeline = device.createRenderPipeline({
+    label: "Fractal Render Pipeline",
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [fractalBindGroupLayout],
+    }),
+    vertex: {
+      module: passThroughVertModule,
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
+        },
+      ],
+    },
+    fragment: {
+      module: fractalFragModule,
+      entryPoint: "main",
+      targets: [{ format: "rgba32float" }],
+    },
+    primitive: { topology: "triangle-list" },
+  });
+
+  // Create bind group layout for upsampling
+  const upsampleBindGroupLayout = createBindGroupLayout(device, [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.FRAGMENT,
+      buffer: { type: "uniform" },
+    },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.FRAGMENT,
+      texture: { sampleType: "unfilterable-float" },
+    },
+    {
+      binding: 2,
+      visibility: GPUShaderStage.FRAGMENT,
+      texture: { sampleType: "float" },
+    },
+    {
+      binding: 3,
+      visibility: GPUShaderStage.FRAGMENT,
+      sampler: { type: "filtering" },
+    },
+    {
+      binding: 4,
+      visibility: GPUShaderStage.FRAGMENT,
+      sampler: { type: "non-filtering" },
+    },
+    {
+      binding: 5,
+      visibility: GPUShaderStage.FRAGMENT,
+      texture: { sampleType: "unfilterable-float" },
+    },
+  ]);
+
+  const textureSampler = device.createSampler({
+    magFilter: "linear",
+    minFilter: "linear",
+  });
+  const nearestSampler = device.createSampler({
+    magFilter: "nearest",
+    minFilter: "nearest",
+  });
+
+  // Create render pipeline for upsampling
+  const upsampleRenderPipeline = device.createRenderPipeline({
+    label: "Upsample Render Pipeline",
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [upsampleBindGroupLayout],
+    }),
+    vertex: {
+      module: passThroughVertModule,
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
+        },
+      ],
+    },
+    fragment: {
+      module: upsampleFragModule,
+      entryPoint: "main",
+      targets: [{ format: format }, { format: "r32float" }],
+    },
+    primitive: { topology: "triangle-list" },
+  });
+
+  // Create bind group layout and pipeline for blitting to canvas
+  const blitBindGroupLayout = createBindGroupLayout(device, [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.FRAGMENT,
+      sampler: { type: "filtering" },
+    },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.FRAGMENT,
+      texture: { sampleType: "float" },
+    },
+  ]);
+
+  const blitRenderPipeline = device.createRenderPipeline({
+    label: "Blit Render Pipeline",
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [blitBindGroupLayout],
+    }),
+    vertex: {
+      module: passThroughVertModule,
+      entryPoint: "main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
+        },
+      ],
+    },
+    fragment: {
+      module: blitFragModule,
+      entryPoint: "main",
+      targets: [{ format: format }],
+    },
+    primitive: { topology: "triangle-list" },
+  });
+
+  // Framebuffers for precision rendering
+  const precisionFbos = Array(maxPerformance)
+    .fill(0)
+    .map((_, i) => {
+      const r = 2 ** i;
+      const shape: [number, number] = [width / r, height / r];
+      const texture = device.createTexture({
+        size: { width: shape[0], height: shape[1], depthOrArrayLayers: 1 },
+        format: "rgba32float",
+        usage:
+          GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      });
+      const offsets = new PoissonDisk({ shape: [r, r], radius: 0.1 }).fill();
+      offsets.sort(() => Math.random() - 0.5);
+      offsets.unshift([r / 2, r / 2]);
+      return { fbo: texture, shape, offsets };
+    });
+
+  const screenTex1 = device.createTexture({
+    size: { width, height, depthOrArrayLayers: 1 },
+    format: format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  const screenTex2 = device.createTexture({
+    size: { width, height, depthOrArrayLayers: 1 },
+    format: format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+  });
+  const depthTex1 = device.createTexture({
+    size: { width, height, depthOrArrayLayers: 1 },
+    format: "r32float",
+    usage:
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_SRC,
+  });
+  const depthTex2 = device.createTexture({
+    size: { width, height, depthOrArrayLayers: 1 },
+    format: "r32float",
+    usage:
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.COPY_SRC,
+  });
+
+  const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+  depthReadbackBuffer = device.createBuffer({
+    size: bytesPerRow * height,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+
+  const pingpong = (frame: number) =>
+    frame % 2 === 0
+      ? [screenTex1, screenTex2, depthTex1, depthTex2]
+      : [screenTex2, screenTex1, depthTex2, depthTex1];
+
+  let from: GPUTexture, fromDepth: GPUTexture;
+  let start = Date.now();
+
+  let change_counter = csgChangeCounter.peek();
+  async function loop() {
+    if (depthReadbackPromise) await depthReadbackPromise;
+    const state = playerControls.state;
+    const latest_counter = csgChangeCounter.peek();
+    const csg_tree_has_changes = change_counter !== latest_counter;
+    const has_changes = hasChanges.value || csg_tree_has_changes;
+    change_counter = latest_counter;
+    if (csg_tree_has_changes) {
+      updateTreeBuffer(csgTree.serializeTreeForWebGPU());
     }
-  }
-  
-  const offsets: [number, number][] = new PoissonDisk({
-    shape: [repeat, repeat],
-    radius: .2,
-  }).fill();
+    hasChanges.value = false;
+    const { fbo, shape, offsets } = precisionFbos[performance];
+    const [source, target, sourceDepth, targetDepth] = pingpong(frame);
+    if (!from) from = source;
+    if (!fromDepth) fromDepth = sourceDepth;
+    if (has_changes) step = 0;
 
-  if(repeat ===9) {console.log(offsets)}
-  
-  shuffleArray(offsets)
-  
-  // offsets.unshift([repeat / 2, repeat / 2])
-  offsets.unshift([0, 0])
+    if (requestDepthReadback) requestDepthReadback = false;
 
-  return {
-    fbo,
-    shape,
-    offsets,
-  }
-});
+    if (step < offsets.length) {
+      const offset = offsets[step];
+      const uniformValues = new Float32Array([
+        shape[0],
+        shape[1],
+        offset[0],
+        offset[1],
+        repeat,
+        repeat,
+        0,
+        0,
+        state.cameraPosition[0],
+        state.cameraPosition[1],
+        state.cameraPosition[2],
+        0,
+        ...state.cameraDirection,
+        0,
+        state.scrollX,
+        state.scrollY,
+        0,
+      ]);
+      updateBuffer(device, uniformBuffer!, uniformValues);
 
-const screenTex1 = regl.texture({
-  width,
-  height,
-  mag: 'nearest',
-  // mag: 'linear',
-})
+      const commandEncoder = device.createCommandEncoder();
 
-const screenBuffer1 = regl.framebuffer({
-  width,
-  height,
-  depth: false,
-  color: screenTex1,
-})
+      const renderPassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [
+          {
+            view: fbo.createView(),
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      };
+      let passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+      passEncoder.setPipeline(fractalRenderPipeline);
+      passEncoder.setVertexBuffer(0, vertexBuffer);
+      passEncoder.setBindGroup(0, fractalBindGroup!);
+      passEncoder.draw(6);
+      passEncoder.end();
 
-const screenTex2 = regl.texture({
-  width,
-  height,
-  mag: 'nearest',
-  // mag: 'linear',
-})
+      const upsampleUniformValues = new Float32Array([
+        offset[0],
+        offset[1],
+        step,
+        repeat,
+        width,
+        height,
+        offsets.length,
+      ]);
+      updateBuffer(device, upsampleUniformBuffer, upsampleUniformValues);
 
-const screenBuffer2 = regl.framebuffer({
-  width,
-  height,
-  depth: false,
-  color: screenTex2,
-})
+      const upsampleBindGroup = createBindGroup(
+        device,
+        upsampleBindGroupLayout,
+        [
+          { binding: 0, resource: { buffer: upsampleUniformBuffer } },
+          { binding: 1, resource: fbo.createView() },
+          { binding: 2, resource: from.createView() },
+          { binding: 3, resource: textureSampler },
+          { binding: 4, resource: nearestSampler },
+          { binding: 5, resource: fromDepth.createView() },
+        ],
+      );
 
-const pingpong = (frame: number) => frame % 2 === 0 ? [screenBuffer1, screenBuffer2]: [screenBuffer2, screenBuffer1]
+      const upsamplePassDescriptor: GPURenderPassDescriptor = {
+        colorAttachments: [
+          {
+            view: target.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+          {
+            view: targetDepth.createView(),
+            clearValue: { r: 0, g: 0, b: 0, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      };
+      passEncoder = commandEncoder.beginRenderPass(upsamplePassDescriptor);
+      passEncoder.setPipeline(upsampleRenderPipeline);
+      passEncoder.setVertexBuffer(0, vertexBuffer);
+      passEncoder.setBindGroup(0, upsampleBindGroup);
+      passEncoder.draw(6);
+      passEncoder.end();
 
-type SDFUniforms = {
-  screenSize: Vec2,
-  cameraPosition: Vec3,
-  cameraDirection: Mat4,
-  scrollX: number,
-  scrollY: number,
-  offset: Vec2,
-  repeat: Vec2,
-}
+      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+      commandEncoder.copyTextureToBuffer(
+        { texture: targetDepth },
+        { buffer: depthReadbackBuffer!, bytesPerRow },
+        { width, height },
+      );
 
-type SDFAttributes = {
-  position: Buffer,
-}
+      const canvasView = context.getCurrentTexture().createView();
+      const blitBindGroup = createBindGroup(device, blitBindGroupLayout, [
+        { binding: 0, resource: textureSampler },
+        { binding: 1, resource: target.createView() },
+      ]);
 
-type SDFProps = SDFUniforms & {
-  target: Framebuffer
-}
+      const renderPassDescriptorCanvas: GPURenderPassDescriptor = {
+        colorAttachments: [
+          {
+            view: canvasView,
+            clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+            loadOp: "clear",
+            storeOp: "store",
+          },
+        ],
+      };
+      passEncoder = commandEncoder.beginRenderPass(renderPassDescriptorCanvas);
+      passEncoder.setPipeline(blitRenderPipeline);
+      passEncoder.setVertexBuffer(0, vertexBuffer);
+      passEncoder.setBindGroup(0, blitBindGroup);
+      passEncoder.draw(6);
+      passEncoder.end();
 
-const position = regl.buffer([
-  [-1, -1],
-  [1, -1],
-  [1,  1],
-  [-1, -1],   
-  [1, 1,],
-  [-1, 1]
-]);
-
-const renderSDF = regl<SDFUniforms, SDFAttributes, SDFProps>({
-  frag,
-  vert: passThroughVert,
-  uniforms: {
-      screenSize: regl.prop<SDFProps, "screenSize">('screenSize'),
-      cameraPosition: regl.prop<SDFProps, "cameraPosition">('cameraPosition'),
-      cameraDirection: regl.prop<SDFProps, "cameraDirection">('cameraDirection'),
-      scrollX: regl.prop<SDFProps, "scrollX">('scrollX'),
-      scrollY: regl.prop<SDFProps, "scrollY">('scrollY'),
-      offset: regl.prop<SDFProps, "offset">('offset'),
-      repeat: regl.prop<SDFProps, "repeat">('repeat'),
-  },
-  attributes: {
-      position
-  },
-  count: 6,
-  framebuffer: regl.prop<SDFProps, "target">("target")
-});
-
-type DrawToCanvasUniforms = {
-  inputTexture: Texture | Framebuffer
-}
-// render texture to screen
-const drawToCanvas = regl<DrawToCanvasUniforms, {}, DrawToCanvasUniforms>({
-  vert: passThroughVert,
-  frag: `
-      precision highp float;
-      uniform sampler2D inputTexture;
-      varying vec2 uv;
-
-
-
-      void main () {
-        vec2 xy = uv * 0.5 + 0.5;
-        vec4 color = texture2D(inputTexture, xy);
-        gl_FragColor = color;
-      }
-  `,
-  uniforms: {
-      inputTexture: regl.prop<DrawToCanvasUniforms, 'inputTexture'>('inputTexture'),
-  },
-  attributes: {
-      position
-  },
-  count: 6,
-});
-
-type UpsampleCanvasUniforms = {
-  existingTexture: Texture | Framebuffer
-  inputTexture: Texture | Framebuffer
-  offset: Vec2,
-  step: number,
-  repeat: number,
-  screenSize: Vec2,
-  totalSteps: number,
-}
-
-type FramebufferProp = {
-  framebuffer: Framebuffer | Renderbuffer
-}
-
-const upsample = regl<UpsampleCanvasUniforms, {}, UpsampleCanvasUniforms & FramebufferProp>({
-  vert: passThroughVert,
-  frag: `
-      precision highp float;
-      uniform sampler2D inputTexture;
-      uniform sampler2D existingTexture;
-      varying vec2 uv;
-      uniform vec2 offset;
-      uniform float step;
-      uniform float repeat;
-      uniform vec2 screenSize;
-
-      uniform float totalSteps;
-
-      void main () {
-        vec2 xy = gl_FragCoord.xy / screenSize;
-        vec2 m = mod(gl_FragCoord.xy, repeat);
-
-
-        vec4 current = texture2D(existingTexture, xy);
-        vec2 samplexy = xy + ((m - offset) / 2.) / screenSize;
-        vec4 sample = texture2D(inputTexture, samplexy);
-
-        float maxDist = sqrt(2. * repeat * repeat);
-        float d = distance(m, offset) / maxDist;
-        float dist = min(d, 1.00 - d); 
-        //dist = d;
-
-        float weight = clamp(pow((1. - dist), pow(step, sqrt(2.)/2.)), 0., 1.);
-        gl_FragColor = mix(current, sample, weight);
-        // gl_FragColor = vec4(m - offset ,0., 1.);
-      }
-  `,
-  uniforms: {
-      existingTexture: regl.prop<UpsampleCanvasUniforms, 'existingTexture'>('existingTexture'),
-      inputTexture: regl.prop<UpsampleCanvasUniforms, 'inputTexture'>('inputTexture'),
-      offset: regl.prop<UpsampleCanvasUniforms, 'offset'>('offset'),
-      step: regl.prop<UpsampleCanvasUniforms, 'step'>('step'),
-      repeat: regl.prop<UpsampleCanvasUniforms, 'repeat'>('repeat'),
-      screenSize: regl.prop<UpsampleCanvasUniforms, 'screenSize'>('screenSize'),
-      totalSteps: regl.prop<UpsampleCanvasUniforms, 'totalSteps'>('totalSteps'),
-  },
-  attributes: {
-      position
-  },
-  count: 6,
-  framebuffer: regl.prop<FramebufferProp, "framebuffer">("framebuffer"),
-});
-
-let isRendering = true
-let from: Framebuffer
-
-let avgFrameTime = 1000/60
-const numSamples = 20
-function loop() {
-  const start = Date.now()
-
-  const state = playerControls.state
-  const { fbo, shape, offsets } = precisionFbos[performance]
-  const [source, target] = pingpong(frame)
-  if (!from) from = source
-  if (state.hasChanges) { 
-    step = 0
-  }
-
-  if (step < offsets.length) {
-    const offset = offsets[step]
-    renderSDF({
-      screenSize: shape,
-      cameraPosition: state.cameraPosition as Vec3,
-      cameraDirection: state.cameraDirection as Mat4,
-      scrollX: state.scrollX,
-      scrollY: state.scrollY,
-      offset,
-      repeat: [repeat, repeat],
-      target: fbo,
-    })
-    upsample({
-      inputTexture: fbo,
-      existingTexture: from,
-      offset,
-      framebuffer: target,
-      step,
-      repeat,
-      screenSize: [width, height],
-      totalSteps: offsets.length,
-    })
-    drawToCanvas({
-      inputTexture: target
-    })
-    // not so nice hack to force syncronouuus drawing
-    target.use(() => regl.read({ width: 1, height: 1 }))
-    isRendering = true
-  } else isRendering = false
-
-  const frameTime = Date.now() - start
-  avgFrameTime = ((numSamples - 1) * avgFrameTime + frameTime) / numSamples
-
-  if (isRendering && frame % 60 === 0) {
-    const fps = 1000 / avgFrameTime
-    console.log("fps", fps)
-    if (fps > 120) {
-      const nextPerformance = Math.max(0, performance - 1)
-      performance = nextPerformance
-      repeat = 2 ** nextPerformance
-    } else if (fps < 60) {
-      const nextPerformance = Math.min(maxPerformance - 1, performance + 1)
-      performance = nextPerformance
-      repeat = 2 ** nextPerformance
+      device.queue.submit([commandEncoder.finish()]);
     }
+
+    const FRAMES = 60;
+    const MARGIN = 2;
+    if (frame % FRAMES === 0) {
+      const current = Date.now();
+      const diff = current - start;
+      start = current;
+      if (has_changes) {
+        const avgFrameTime = diff / FRAMES;
+        const fps = 1000 / avgFrameTime;
+        console.log(frame, fps);
+        let nextPerformance = performance;
+        if (fps > 120 - MARGIN) nextPerformance = Math.max(0, performance - 1);
+        else if (fps < 40 - MARGIN)
+          nextPerformance = Math.min(maxPerformance - 1, performance + 1);
+        // if (performance !== nextPerformance) hasChanges.value = true;
+        // nextPerformance = 3;
+        performance = nextPerformance;
+        repeat = 2 ** nextPerformance;
+        console.log(performance);
+      }
+    }
+
+    requestAnimationFrame(loop);
+
+    from = target;
+    fromDepth = targetDepth;
+    step++;
+    frame++;
   }
 
-  requestAnimationFrame(() => loop())
-
-  from = target
-
-  step++
-  frame++
+  loop();
 }
 
-loop()
+main();
+initUI();
