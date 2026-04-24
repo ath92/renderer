@@ -6,7 +6,7 @@ import passThroughVert from "./pass-through-vert.glsl"
 import playerControls from './player-controls'
 
 const urlParams = new URLSearchParams(window.location.search);
-const fractal = urlParams.get('fractal') || 'mandelbulb';
+const fractal = urlParams.get('fractal') || 'klein2';
 let performance = parseInt(urlParams.get("performance") as string | null ?? "0")
 
 const maxPerformance = 4
