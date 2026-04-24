@@ -33,8 +33,6 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
     // location.href = `${location.origin}${location.pathname}?${newSearch}`
     performance = parseInt(e.key) - 1
     repeat = 2 ** performance
-    step = 0
-    frame = 0
   }
 });
 
@@ -261,6 +259,8 @@ let from: Framebuffer
 
 let avgFrameTime = 1000/60
 const numSamples = 20
+let autoAdjustCounter = 0
+const autoAdjustInterval = 60
 function loop() {
   const start = Date.now()
 
@@ -305,7 +305,10 @@ function loop() {
   const frameTime = Date.now() - start
   avgFrameTime = ((numSamples - 1) * avgFrameTime + frameTime) / numSamples
 
-  if (isRendering && frame % 60 === 0) {
+  if (isRendering && frame % autoAdjustInterval === 0 && autoAdjustCounter < 10) {
+    autoAdjustCounter++
+  } else if (isRendering && frame % autoAdjustInterval === 0) {
+    autoAdjustCounter = 0
     const fps = 1000 / avgFrameTime
     console.log("fps", fps)
     if (fps > 120) {
